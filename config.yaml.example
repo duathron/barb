@@ -1,0 +1,41 @@
+# phishing-analyzer configuration example
+# Copy to ~/.phishing-analyzer/config.yaml and adjust as needed
+
+scoring:
+  weights:
+    entropy: 1.0
+    homoglyph: 1.5
+    tld: 1.0
+    subdomain: 1.0
+    brand: 1.2
+    shortener: 0.8
+    encoding: 1.0
+    ip_url: 1.0
+  thresholds:
+    low_risk: 1
+    suspicious: 4
+    high_risk: 8
+    phishing: 13
+
+explain:
+  # Provider: template (default, no API key) | anthropic | openai
+  provider: "template"
+  # Model for LLM providers
+  # model: "claude-sonnet-4-20250514"
+  # API key — set here OR use environment variable PHISHING_ANALYZER_LLM_KEY
+  # api_key: "your-api-key-here"
+  # Send defanged URL to LLM for context (set false for maximum privacy)
+  send_url: true
+
+output:
+  # Default output format: rich | console | json | csv
+  default_format: "rich"
+  # Suppress ASCII banner (-q)
+  quiet: false
+  # Defang URLs in terminal output (always on for TTY, off for JSON/CSV)
+  defang: true
+
+update_check:
+  # Check for new releases on GitHub
+  enabled: true
+  check_interval_hours: 24
