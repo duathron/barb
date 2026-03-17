@@ -1,8 +1,100 @@
-"""Passive version check against GitHub releases."""
+"""Passive version check against PyPI for barb-phish releases.
+
+Uses only stdlib (urllib.request) — no additional dependencies.
+Cache stored in ~/.barb/version_check.json with secure permissions.
+"""
 
 from __future__ import annotations
 
-# TODO: Implement version check (mirror vex/version_check.py)
-# - Check GitHub releases API for latest version
-# - Cache result in ~/.barb/version_check.json
-# - Respect update_check.enabled and check_interval_hours config
+import json
+import stat
+import time
+import urllib.request
+from pathlib import Path
+from typing import Optional
+
+from . import __version__
+
+_STATE_PATH = Path.home() / ".barb" / "version_check.json"
+_PYPI_API = "https://pypi.org/pypi/barb-phish/json"
+_CHECK_TIMEOUT = 3
+
+
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse 'v1.2.3' or '1.2.3' into (1, 2, 3) for comparison."""
+    v = v.lstrip("v").strip()
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
+def _load_state() -> dict:
+    """Load cached version check state from disk."""
+    try:
+        if _STATE_PATH.exists():
+            return json.loads(_STATE_PATH.read_text())
+    except (OSError, ValueError, KeyError):
+        pass
+    return {}
+
+
+def _save_state(state: dict) -> None:
+    """Save version check state to disk with restricted permissions."""
+    try:
+        _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _STATE_PATH.parent.chmod(stat.S_IRWXU)  # 0o700
+        _STATE_PATH.write_text(json.dumps(state))
+        _STATE_PATH.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+    except OSError:
+        pass
+
+
+def _fetch_latest_version() -> Optional[str]:
+    """Query PyPI JSON API for the latest stable version of barb-phish."""
+    try:
+        req = urllib.request.Request(_PYPI_API, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT) as resp:
+            if resp.status != 200:
+                return None
+            data = json.loads(resp.read())
+            return data.get("info", {}).get("version")
+    except (urllib.error.URLError, ValueError, KeyError, OSError):
+        return None
+
+
+def check_for_update(check_interval_hours: int = 24) -> Optional[str]:
+    """Return the latest version string if an update is available.
+
+    Returns None if current version is up to date, check was performed
+    recently, or a network error occurred. Designed to be fail-silent —
+    never raises exceptions.
+    """
+    state = _load_state()
+
+    last_check = state.get("last_check", 0)
+    cached_version = state.get("latest_version")
+    interval = check_interval_hours * 3600
+    elapsed = time.time() - last_check
+
+    if 0 < elapsed < interval and cached_version:
+        latest = cached_version
+    else:
+        latest = _fetch_latest_version()
+        if latest:
+            _save_state(
+                {
+                    "last_check": time.time(),
+                    "latest_version": latest,
+                }
+            )
+        else:
+            return None
+
+    current = _parse_version(__version__)
+    remote = _parse_version(latest)
+
+    if remote > current:
+        return latest.lstrip("v")
+
+    return None
