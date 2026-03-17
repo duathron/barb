@@ -1,4 +1,4 @@
-# Phishing URL Analyzer — Project Documentation
+# barb — Project Documentation
 
 *Recorded by Project Documentation Agent — 2026-03-17*
 
@@ -6,7 +6,7 @@
 
 ## The Idea
 
-The Phishing URL Analyzer is a Python CLI tool that performs heuristic analysis of URLs to detect phishing indicators. It was chosen unanimously (5/5) in MeetUp VEX-2026-003 as the second portfolio project following vex (VirusTotal IOC Enrichment Tool).
+**barb** is a Python CLI tool that performs heuristic analysis of URLs to detect phishing indicators. It was chosen unanimously (5/5) in MeetUp VEX-2026-003 as the second portfolio project following vex (VirusTotal IOC Enrichment Tool). The name was adopted in MeetUp VEX-2026-005 — a barb is the sharp backward-pointing part of a fishhook that catches and holds.
 
 **Core principle:** The tool works entirely offline with zero API keys. All analysis is pure string-based heuristics on the URL itself — no HTTP requests are made to analyzed URLs. An optional `--explain` flag adds LLM-powered natural language explanations for analysts who want context beyond the raw signals.
 
@@ -33,11 +33,11 @@ The Phishing URL Analyzer is a Python CLI tool that performs heuristic analysis 
 ### Module Structure
 
 ```
-phishing_analyzer/
+barb/
 ├── __init__.py           # __version__, __author__, __repo__
-├── __main__.py           # python -m phishing_analyzer
+├── __main__.py           # python -m barb
 ├── main.py               # Typer CLI: analyze, config, version
-├── banner.py             # ASCII art banner (phishing/hook theme)
+├── banner.py             # ASCII art banner (fishhook, b&w)
 ├── config.py             # Pydantic v2 config with priority hierarchy
 ├── models.py             # AnalysisResult, Signal, RiskVerdict, ParsedURL
 ├── url_parser.py         # URL decomposition via urllib.parse
@@ -74,8 +74,8 @@ phishing_analyzer/
 ### Config Priority Hierarchy
 
 1. CLI flags (`--threshold`, `--output`, `--config`)
-2. Environment variables (`PHISHGUARD_LLM_KEY`)
-3. User config (`~/.phishing-analyzer/config.yaml`)
+2. Environment variables (`BARB_LLM_KEY`)
+3. User config (`~/.barb/config.yaml`)
 4. Package defaults (Pydantic model defaults)
 
 ### Security Model
@@ -84,7 +84,7 @@ phishing_analyzer/
 2. **URL length cap:** 2048 characters
 3. **File input cap:** 10 MB
 4. **No eval/exec** — no dynamic code execution
-5. **Secure storage:** Config dir `~/.phishing-analyzer/` with 0o700, config file 0o600
+5. **Secure storage:** Config dir `~/.barb/` with 0o700, config file 0o600
 6. **Minimal dependencies:** Typer, Rich, Pydantic, PyYAML, python-dotenv (core only)
 7. **Bundled static data** — no runtime network fetches for data files
 8. **Input sanitization** — strip null bytes and control characters
@@ -117,9 +117,9 @@ phishing_analyzer/
 
 **CLI Interface:**
 ```
-phishing-analyzer analyze <url> [urls...] [-f FILE] [-o FORMAT] [-q] [--explain] [--threshold N]
-phishing-analyzer config [--show]
-phishing-analyzer version
+barb analyze <url> [urls...] [-f FILE] [-o FORMAT] [-q] [--explain] [--threshold N]
+barb config [--show]
+barb version
 ```
 
 - Exit codes: 0=safe/low, 1=suspicious/high, 2=phishing, 3=error
@@ -131,11 +131,12 @@ phishing-analyzer version
 - Template-based fallback as default (no API key needed)
 - Anthropic Claude + OpenAI as optional providers
 - LLM receives defanged URL + signals (configurable: `send_url: true/false`)
-- Dependencies as optional extras: `pip install phishing-analyzer[llm]`
+- Dependencies as optional extras: `pip install barb-phish[llm]`
 - ExplainerProtocol enables easy addition of new providers
 
 **Publication:**
-- GitHub + PyPI
+- GitHub: https://github.com/duathron/barb
+- PyPI: `pip install barb-phish`
 - MIT License
 - CI: pytest + ruff lint on PR
 - CD: PyPI publish on version tag
@@ -180,19 +181,22 @@ phishing-analyzer version
 
 ### Decision 7: LLM dependencies as optional extras
 **Vote:** Unanimous (7/7)
-**Rationale:** Core install has 5 dependencies only (typer, rich, pydantic, pyyaml, python-dotenv). LLM packages (anthropic, openai) add significant dependency weight and are only needed for `--explain` with cloud providers. `pip install phishing-analyzer[llm]` keeps the default install minimal.
+**Rationale:** Core install has 5 dependencies only (typer, rich, pydantic, pyyaml, python-dotenv). LLM packages (anthropic, openai) add significant dependency weight and are only needed for `--explain` with cloud providers. `pip install barb-phish[llm]` keeps the default install minimal.
 
 ### Decision 8: CI from v1.0
 **Vote:** Unanimous (7/7)
 **Rationale:** Improvement over vex v1.0 which shipped without CI. pytest + ruff lint on PR ensures quality from the start. This is a portfolio project — visible CI adds credibility.
 
+### Decision 9: Name `barb` (MeetUp VEX-2026-005)
+**Vote:** Unanimous (2/2 — Marketing + UX Design)
+**Rationale:** A barb is the sharp backward-pointing part of a fishhook — the mechanism that catches and holds. Short (4 chars), no CLI or PyPI conflicts, phonetically pairs with `vex`. PyPI name `barb-phish` uses suffix pattern from vex (`vex-ioc`). Banner: geometric fishhook in black & white (distinct from vex's cyan robot).
+
 ---
 
 ## Current Status
 
-**Phase:** Project scaffold created. Ready for implementation.
+**Phase:** Project scaffold created and renamed to `barb`. Ready for implementation.
 **Next steps:** Evening 1 — Foundation (config, models, URL parser, analyzer protocol, data files).
-**Working name:** `phishing-analyzer` (final name pending Marketing + UX Design session).
 
 ---
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from phishing_analyzer.models import ParsedURL, Signal
+from barb.models import ParsedURL, Signal
 
 
 @runtime_checkable

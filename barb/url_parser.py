@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 from urllib.parse import urlparse
 
-from phishing_analyzer.models import ParsedURL
+from barb.models import ParsedURL
 
 _MAX_URL_LEN = 2048
 

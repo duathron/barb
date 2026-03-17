@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 
-from phishing_analyzer.models import ParsedURL, Signal, SignalSeverity
+from barb.models import ParsedURL, Signal, SignalSeverity
 
 
 class EntropyAnalyzer:

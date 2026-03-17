@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from phishing_analyzer.explain.template import TemplateExplainer
-from phishing_analyzer.models import (
+from barb.explain.template import TemplateExplainer
+from barb.models import (
     AnalysisResult,
     ParsedURL,
     RiskVerdict,

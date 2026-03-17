@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from phishing_analyzer.main import app
+from barb.main import app
 
 runner = CliRunner()
 
@@ -18,4 +18,4 @@ def test_version_command():
 def test_no_args_shows_help():
     result = runner.invoke(app, [])
     assert result.exit_code == 0
-    assert "Usage" in result.output or "phishing-analyzer" in result.output
+    assert "Usage" in result.output or "barb" in result.output

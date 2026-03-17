@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.config import AppConfig
-from phishing_analyzer.models import AnalysisResult, RiskVerdict, Signal
+from barb.config import AppConfig
+from barb.models import AnalysisResult, RiskVerdict, Signal
 
 
 def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:

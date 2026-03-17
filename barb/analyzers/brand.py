@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.analyzers.base import load_data
-from phishing_analyzer.models import ParsedURL, Signal, SignalSeverity
+from barb.analyzers.base import load_data
+from barb.models import ParsedURL, Signal, SignalSeverity
 
 _brands: dict[str, list[str]] | None = None
 

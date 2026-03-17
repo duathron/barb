@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-publish:
-    name: Build and publish phishing-analyzer
+    name: Build and publish barb-phish
     runs-on: ubuntu-latest
 
     steps:

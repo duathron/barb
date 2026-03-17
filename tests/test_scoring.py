@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.config import AppConfig
-from phishing_analyzer.models import RiskVerdict, Signal, SignalSeverity
-from phishing_analyzer.scoring import compute_risk_score, determine_verdict
+from barb.config import AppConfig
+from barb.models import RiskVerdict, Signal, SignalSeverity
+from barb.scoring import compute_risk_score, determine_verdict
 
 
 def test_safe_verdict_no_signals():

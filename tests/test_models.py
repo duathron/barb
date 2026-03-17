@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.models import RiskVerdict, SignalSeverity
+from barb.models import RiskVerdict, SignalSeverity
 
 
 def test_signal_severity_points():

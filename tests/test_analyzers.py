@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.analyzers.entropy import EntropyAnalyzer
-from phishing_analyzer.analyzers.ip_url import IPURLAnalyzer
-from phishing_analyzer.analyzers.subdomain import SubdomainAnalyzer
-from phishing_analyzer.url_parser import parse_url
+from barb.analyzers.entropy import EntropyAnalyzer
+from barb.analyzers.ip_url import IPURLAnalyzer
+from barb.analyzers.subdomain import SubdomainAnalyzer
+from barb.url_parser import parse_url
 
 
 def test_entropy_analyzer_high_entropy():

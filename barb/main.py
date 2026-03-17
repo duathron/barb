@@ -1,4 +1,4 @@
-"""Typer CLI application for phishing-analyzer."""
+"""Typer CLI application for barb."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 import typer
 
 app = typer.Typer(
-    name="phishing-analyzer",
+    name="barb",
     help="Heuristic phishing URL analyzer for SOC/DFIR workflows.",
     no_args_is_help=True,
 )
@@ -42,9 +42,9 @@ def config(
 @app.command()
 def version() -> None:
     """Show version information."""
-    from phishing_analyzer import __version__
+    from barb import __version__
 
-    typer.echo(f"phishing-analyzer {__version__}")
+    typer.echo(f"barb {__version__}")
 
 
 def main() -> None:

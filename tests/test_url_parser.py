@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from phishing_analyzer.url_parser import parse_url
+from barb.url_parser import parse_url
 
 
 def test_parse_simple_url():

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from phishing_analyzer.models import ParsedURL, Signal, SignalSeverity
+from barb.models import ParsedURL, Signal, SignalSeverity
 
 _PERCENT_PATTERN = re.compile(r"%[0-9A-Fa-f]{2}")
 

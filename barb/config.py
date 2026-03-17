@@ -1,6 +1,6 @@
-"""Configuration system for phishing-analyzer.
+"""Configuration system for barb.
 
-Priority hierarchy: CLI flags > env vars > ~/.phishing-analyzer/config.yaml > defaults.
+Priority hierarchy: CLI flags > env vars > ~/.barb/config.yaml > defaults.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import yaml
 from pydantic import BaseModel
 
 
-_APP_DIR = Path.home() / ".phishing-analyzer"
+_APP_DIR = Path.home() / ".barb"
 _DIR_MODE = 0o700
 _FILE_MODE = 0o600
 
@@ -99,7 +99,7 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
     config = AppConfig(**data)
 
     # Env var overrides
-    llm_key = os.getenv("PHISHING_ANALYZER_LLM_KEY")
+    llm_key = os.getenv("BARB_LLM_KEY")
     if llm_key:
         config.explain.api_key = llm_key
 

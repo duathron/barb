@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.models import ParsedURL, Signal, SignalSeverity
+from barb.models import ParsedURL, Signal, SignalSeverity
 
 
 class IPURLAnalyzer:

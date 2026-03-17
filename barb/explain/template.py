@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from phishing_analyzer.models import AnalysisResult, RiskVerdict
+from barb.models import AnalysisResult, RiskVerdict
 
 
 class TemplateExplainer:

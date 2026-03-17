@@ -1,11 +1,11 @@
-"""Shared test fixtures for phishing-analyzer."""
+"""Shared test fixtures for barb."""
 
 from __future__ import annotations
 
 import pytest
 
-from phishing_analyzer.config import AppConfig
-from phishing_analyzer.url_parser import parse_url
+from barb.config import AppConfig
+from barb.url_parser import parse_url
 
 
 @pytest.fixture

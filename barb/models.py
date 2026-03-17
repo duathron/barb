@@ -1,4 +1,4 @@
-"""Pydantic v2 data models for phishing-analyzer."""
+"""Pydantic v2 data models for barb."""
 
 from __future__ import annotations
 

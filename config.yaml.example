@@ -1,5 +1,5 @@
-# phishing-analyzer configuration example
-# Copy to ~/.phishing-analyzer/config.yaml and adjust as needed
+# barb configuration example
+# Copy to ~/.barb/config.yaml and adjust as needed
 
 scoring:
   weights:
@@ -22,7 +22,7 @@ explain:
   provider: "template"
   # Model for LLM providers
   # model: "claude-sonnet-4-20250514"
-  # API key — set here OR use environment variable PHISHING_ANALYZER_LLM_KEY
+  # API key — set here OR use environment variable BARB_LLM_KEY
   # api_key: "your-api-key-here"
   # Send defanged URL to LLM for context (set false for maximum privacy)
   send_url: true

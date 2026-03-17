@@ -5,7 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from phishing_analyzer.models import AnalysisResult
+from barb.models import AnalysisResult
 
 
 def batch_analyze(

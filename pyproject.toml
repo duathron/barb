@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "phishing-analyzer"
+name = "barb-phish"
 version = "1.0.0"
 description = "Heuristic phishing URL analyzer for SOC/DFIR workflows"
 readme = "README.md"
@@ -36,15 +36,15 @@ llm = ["anthropic>=0.30.0", "openai>=1.30.0"]
 dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
 
 [project.scripts]
-phishing-analyzer = "phishing_analyzer.main:main"
+barb = "barb.main:main"
 
 [project.urls]
-Homepage = "https://github.com/duathron/phishing-analyzer"
-Repository = "https://github.com/duathron/phishing-analyzer"
-"Bug Tracker" = "https://github.com/duathron/phishing-analyzer/issues"
+Homepage = "https://github.com/duathron/barb"
+Repository = "https://github.com/duathron/barb"
+"Bug Tracker" = "https://github.com/duathron/barb/issues"
 
 [tool.setuptools.packages.find]
-include = ["phishing_analyzer*"]
+include = ["barb*"]
 
 [tool.ruff]
 target-version = "py311"
