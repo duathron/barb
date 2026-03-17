@@ -12,12 +12,6 @@
   Heuristic phishing URL analyzer for SOC/DFIR workflows. No API keys. No network requests. Pure offline analysis.
 </p>
 
-```
- _               _
-| |__  __ _ _ __| |__
-| '_ \/ _` | '__| '_ \
-|_.__/\__,_|_|  |_.__/
-```
 
 ---
 
