@@ -180,14 +180,24 @@ def analyze(
 
     # Analyze
     if len(all_urls) == 1:
-        results = [_analyze_single(all_urls[0], config, explain=explain)]
+        try:
+            results = [_analyze_single(all_urls[0], config, explain=explain)]
+        except ValueError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(3) from None
     else:
-        from barb.batch import batch_analyze
-
-        results = batch_analyze(
-            all_urls,
-            lambda url: _analyze_single(url, config, explain=explain),
-        )
+        valid_results: list[AnalysisResult] = []
+        errors = 0
+        for url in all_urls:
+            try:
+                valid_results.append(_analyze_single(url, config, explain=explain))
+            except ValueError as exc:
+                typer.echo(f"Error ({url[:80]}): {exc}", err=True)
+                errors += 1
+        results = valid_results
+        if not results:
+            typer.echo(f"All {errors} URL(s) failed validation.", err=True)
+            raise typer.Exit(3)
 
     # Apply threshold filter
     if threshold > 0:
