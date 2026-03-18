@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from barb.config import AppConfig
-from barb.models import AnalysisResult, RiskVerdict, Signal
+from barb.models import RiskVerdict, Signal
 
 
 def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:

@@ -13,7 +13,7 @@ from barb import __version__
 from barb.banner import show_banner
 from barb.config import AppConfig, load_config
 from barb.defang import defang_url
-from barb.models import AnalysisResult, RiskVerdict
+from barb.models import AnalysisResult
 from barb.scoring import compute_risk_score, determine_verdict
 from barb.url_parser import parse_url
 
@@ -101,7 +101,10 @@ def _explain(result: AnalysisResult, config: AppConfig) -> str:
         from barb.explain.llm import AnthropicExplainer
 
         if not config.explain.api_key:
-            typer.echo("Error: API key required for Anthropic. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml", err=True)
+            typer.echo(
+                "Error: API key required for Anthropic. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml",
+                err=True,
+            )
             return ""
         explainer = AnthropicExplainer(
             api_key=config.explain.api_key,
@@ -113,7 +116,10 @@ def _explain(result: AnalysisResult, config: AppConfig) -> str:
         from barb.explain.llm import OpenAIExplainer
 
         if not config.explain.api_key:
-            typer.echo("Error: API key required for OpenAI. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml", err=True)
+            typer.echo(
+                "Error: API key required for OpenAI. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml",
+                err=True,
+            )
             return ""
         explainer = OpenAIExplainer(
             api_key=config.explain.api_key,
@@ -245,7 +251,7 @@ def config(
         typer.echo(yaml.dump(cfg.model_dump(), default_flow_style=False, sort_keys=False))
     else:
         typer.echo("Use --show to display current configuration.")
-        typer.echo(f"Config file: ~/.barb/config.yaml")
+        typer.echo("Config file: ~/.barb/config.yaml")
 
 
 @app.command()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from io import StringIO
 
 from barb.models import (
     AnalysisResult,

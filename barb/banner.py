@@ -6,7 +6,6 @@ import sys
 
 from . import __version__
 
-
 _BANNER = r"""
  _               _
 | |__  __ _ _ __| |__

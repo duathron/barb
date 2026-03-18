@@ -34,7 +34,10 @@ def test_template_explainer_phishing():
     result = AnalysisResult(
         url="http://192.168.1.1/paypal",
         defanged_url="hxxp[://]192[.]168[.]1[.]1/paypal",
-        parsed_url=ParsedURL(original="http://192.168.1.1/paypal", scheme="http", host="192.168.1.1", path="/paypal", is_ip=True),
+        parsed_url=ParsedURL(
+            original="http://192.168.1.1/paypal", scheme="http",
+            host="192.168.1.1", path="/paypal", is_ip=True,
+        ),
         signals=[
             Signal(analyzer="ip_url", severity=SignalSeverity.HIGH, label="IP-based URL", detail="Uses IP address"),
         ],

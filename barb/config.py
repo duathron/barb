@@ -12,7 +12,6 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel
 
-
 _APP_DIR = Path.home() / ".barb"
 _DIR_MODE = 0o700
 _FILE_MODE = 0o600

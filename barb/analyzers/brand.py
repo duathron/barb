@@ -36,7 +36,10 @@ class BrandAnalyzer:
                         analyzer=self.name,
                         severity=SignalSeverity.HIGH,
                         label="Brand impersonation",
-                        detail=f"Domain contains '{brand_name}' but is not an official domain ({', '.join(official_domains)})",
+                        detail=(
+                            f"Domain contains '{brand_name}' but is not an official domain"
+                            f" ({', '.join(official_domains)})"
+                        ),
                     ))
 
         return signals
