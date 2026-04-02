@@ -70,6 +70,14 @@ class UpdateCheckConfig(BaseModel):
     check_interval_hours: int = 24
 
 
+class OsintConfig(BaseModel):
+    """OSINT enrichment configuration (opt-in, network-dependent)."""
+
+    dns_timeout: float = 2.0
+    rdap_timeout: float = 5.0
+    cache_ttl_hours: int = 6
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -77,6 +85,7 @@ class AppConfig(BaseModel):
     explain: ExplainConfig = ExplainConfig()
     output: OutputConfig = OutputConfig()
     update_check: UpdateCheckConfig = UpdateCheckConfig()
+    osint: OsintConfig = OsintConfig()
 
 
 def _ensure_app_dir() -> Path:

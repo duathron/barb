@@ -56,20 +56,43 @@ def _get_analyzers() -> list:
     return _analyzers
 
 
+def _run_enrichers(parsed_url, config: AppConfig) -> list:
+    """Run OSINT enrichers and return combined signals. Fail-open on any error."""
+    from barb.enrichers.dns import DNSEnricher
+    from barb.enrichers.rdap import RDAPEnricher
+
+    enrichers = [
+        DNSEnricher(timeout=config.osint.dns_timeout),
+        RDAPEnricher(timeout=config.osint.rdap_timeout),
+    ]
+    signals = []
+    for enricher in enrichers:
+        try:
+            signals.extend(enricher.enrich(parsed_url))
+        except Exception:
+            pass  # Individual enricher failure never blocks analysis
+    return signals
+
+
 # ---------------------------------------------------------------------------
 # Core analysis function
 # ---------------------------------------------------------------------------
 
 
-def _analyze_single(url: str, config: AppConfig, explain: bool = False) -> AnalysisResult:
+def _analyze_single(url: str, config: AppConfig, explain: bool = False, osint: bool = False) -> AnalysisResult:
     """Run all analyzers on a single URL and return the result."""
     parsed = parse_url(url)
     analyzers = _get_analyzers()
 
-    # Collect signals from all analyzers
+    # Collect signals from all heuristic analyzers
     signals = []
     for analyzer in analyzers:
         signals.extend(analyzer.analyze(parsed))
+
+    # OSINT enrichment (opt-in, network-dependent)
+    if osint:
+        osint_signals = _run_enrichers(parsed, config)
+        signals.extend(osint_signals)
 
     # Score and verdict
     score = compute_risk_score(signals, config)
@@ -148,6 +171,8 @@ def analyze(
     explain: Annotated[bool, typer.Option("--explain", "-e", help="Add explanation to output")] = False,
     threshold: Annotated[int, typer.Option("--threshold", "-t", help="Minimum risk score to report")] = 0,
     no_defang: Annotated[bool, typer.Option("--no-defang", help="Disable URL defanging in output")] = False,
+    osint: Annotated[bool, typer.Option("--osint", help="Enable OSINT enrichment (DNS + RDAP). Makes network requests."
+                                        )] = False,
 ) -> None:
     """Analyze one or more URLs for phishing indicators."""
     config = load_config()
@@ -181,7 +206,7 @@ def analyze(
     # Analyze
     if len(all_urls) == 1:
         try:
-            results = [_analyze_single(all_urls[0], config, explain=explain)]
+            results = [_analyze_single(all_urls[0], config, explain=explain, osint=osint)]
         except ValueError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(3) from None
@@ -190,7 +215,7 @@ def analyze(
         errors = 0
         for url in all_urls:
             try:
-                valid_results.append(_analyze_single(url, config, explain=explain))
+                valid_results.append(_analyze_single(url, config, explain=explain, osint=osint))
             except ValueError as exc:
                 typer.echo(f"Error ({url[:80]}): {exc}", err=True)
                 errors += 1
