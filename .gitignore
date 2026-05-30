@@ -29,6 +29,8 @@ config.yaml
 
 # Claude Code
 .claude/
+# Vault is SSOT — CLAUDE.md here is only a local redirect stub, never commit it
+CLAUDE.md
 
 # Environment
 .env
