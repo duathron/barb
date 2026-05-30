@@ -31,6 +31,23 @@ def test_ip_url_analyzer():
     assert signals[0].label == "IP-based URL"
 
 
+def test_ip_url_userinfo_on_domain_host():
+    # The "@" obfuscation trick: visible part looks like a brand, real host is after @.
+    analyzer = IPURLAnalyzer()
+    parsed = parse_url("https://paypal.com@evil-login.com/verify")
+    signals = analyzer.analyze(parsed)
+    labels = [s.label for s in signals]
+    assert "Userinfo in URL" in labels
+    sig = next(s for s in signals if s.label == "Userinfo in URL")
+    assert sig.severity.name == "HIGH"
+
+
+def test_ip_url_no_userinfo_no_signal():
+    analyzer = IPURLAnalyzer()
+    parsed = parse_url("https://www.google.com/search")
+    assert analyzer.analyze(parsed) == []
+
+
 def test_subdomain_depth():
     analyzer = SubdomainAnalyzer()
     parsed = parse_url("http://login.secure.paypal.com.evil.com")

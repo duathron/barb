@@ -31,5 +31,18 @@ class IPURLAnalyzer:
                     label="Userinfo in IP-based URL",
                     detail=f"URL contains userinfo '{parsed_url.userinfo}' with IP address",
                 ))
+        elif parsed_url.userinfo:
+            # "@" obfuscation on a domain host: the part before '@' is userinfo, not the
+            # real host. Attackers put a brand-like string there so the URL *looks*
+            # legitimate while resolving to the host after '@'.
+            signals.append(Signal(
+                analyzer=self.name,
+                severity=SignalSeverity.HIGH,
+                label="Userinfo in URL",
+                detail=(
+                    f"URL contains userinfo '{parsed_url.userinfo}' before '@'; "
+                    f"the real host is '{parsed_url.host}'"
+                ),
+            ))
 
         return signals
