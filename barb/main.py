@@ -56,10 +56,24 @@ def _get_analyzers() -> list:
     return _analyzers
 
 
-def _run_enrichers(parsed_url, config: AppConfig) -> list:
-    """Run OSINT enrichers and return combined signals. Fail-open on any error."""
+def _run_enrichers(parsed_url, config: AppConfig, use_cache: bool = True) -> list:
+    """Run OSINT enrichers and return combined signals. Fail-open on any error.
+
+    Results are cached per host (``osint.cache_ttl_hours`` TTL) to avoid repeat
+    network lookups; pass ``use_cache=False`` to bypass the cache (``--no-cache``).
+    """
     from barb.enrichers.dns import DNSEnricher
     from barb.enrichers.rdap import RDAPEnricher
+
+    host = parsed_url.host.lower()
+    cache = None
+    if use_cache:
+        from barb.cache import get_cache
+
+        cache = get_cache()
+        cached = cache.get(host, config.osint.cache_ttl_hours * 3600)
+        if cached is not None:
+            return cached
 
     enrichers = [
         DNSEnricher(timeout=config.osint.dns_timeout),
@@ -71,6 +85,9 @@ def _run_enrichers(parsed_url, config: AppConfig) -> list:
             signals.extend(enricher.enrich(parsed_url))
         except Exception:
             pass  # Individual enricher failure never blocks analysis
+
+    if cache is not None:
+        cache.set(host, signals)
     return signals
 
 
@@ -79,7 +96,13 @@ def _run_enrichers(parsed_url, config: AppConfig) -> list:
 # ---------------------------------------------------------------------------
 
 
-def _analyze_single(url: str, config: AppConfig, explain: bool = False, osint: bool = False) -> AnalysisResult:
+def _analyze_single(
+    url: str,
+    config: AppConfig,
+    explain: bool = False,
+    osint: bool = False,
+    use_cache: bool = True,
+) -> AnalysisResult:
     """Run all analyzers on a single URL and return the result."""
     parsed = parse_url(url)
     analyzers = _get_analyzers()
@@ -91,7 +114,7 @@ def _analyze_single(url: str, config: AppConfig, explain: bool = False, osint: b
 
     # OSINT enrichment (opt-in, network-dependent)
     if osint:
-        osint_signals = _run_enrichers(parsed, config)
+        osint_signals = _run_enrichers(parsed, config, use_cache=use_cache)
         signals.extend(osint_signals)
 
     # Score and verdict
@@ -173,6 +196,10 @@ def analyze(
     no_defang: Annotated[bool, typer.Option("--no-defang", help="Disable URL defanging in output")] = False,
     osint: Annotated[bool, typer.Option("--osint", help="Enable OSINT enrichment (DNS + RDAP). Makes network requests."
                                         )] = False,
+    no_cache: Annotated[
+        bool,
+        typer.Option("--no-cache", help="Bypass the OSINT result cache (force fresh lookups)."),
+    ] = False,
 ) -> None:
     """Analyze one or more URLs for phishing indicators."""
     config = load_config()
@@ -206,7 +233,7 @@ def analyze(
     # Analyze
     if len(all_urls) == 1:
         try:
-            results = [_analyze_single(all_urls[0], config, explain=explain, osint=osint)]
+            results = [_analyze_single(all_urls[0], config, explain=explain, osint=osint, use_cache=not no_cache)]
         except ValueError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(3) from None
@@ -215,7 +242,7 @@ def analyze(
         errors = 0
         for url in all_urls:
             try:
-                valid_results.append(_analyze_single(url, config, explain=explain, osint=osint))
+                valid_results.append(_analyze_single(url, config, explain=explain, osint=osint, use_cache=not no_cache))
             except ValueError as exc:
                 typer.echo(f"Error ({url[:80]}): {exc}", err=True)
                 errors += 1
