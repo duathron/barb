@@ -18,6 +18,9 @@ def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:
         "shortener": weights.shortener,
         "encoding": weights.encoding,
         "ip_url": weights.ip_url,
+        "typosquat": weights.typosquat,
+        "keyword": weights.keyword,
+        "lexical": weights.lexical,
     }
     total = 0.0
     for signal in signals:

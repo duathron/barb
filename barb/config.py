@@ -28,6 +28,9 @@ class ScoringWeights(BaseModel):
     shortener: float = 0.8
     encoding: float = 1.0
     ip_url: float = 1.0
+    typosquat: float = 1.3
+    keyword: float = 0.6
+    lexical: float = 0.5
 
 
 class ScoringThresholds(BaseModel):

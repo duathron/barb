@@ -31,7 +31,7 @@ _analyzers = None
 
 
 def _get_analyzers() -> list:
-    """Lazily instantiate all 8 heuristic analyzers."""
+    """Lazily instantiate all 11 heuristic analyzers."""
     global _analyzers
     if _analyzers is None:
         from barb.analyzers.brand import BrandAnalyzer
@@ -39,9 +39,12 @@ def _get_analyzers() -> list:
         from barb.analyzers.entropy import EntropyAnalyzer
         from barb.analyzers.homoglyph import HomoglyphAnalyzer
         from barb.analyzers.ip_url import IPURLAnalyzer
+        from barb.analyzers.keyword import KeywordAnalyzer
+        from barb.analyzers.lexical import LexicalAnalyzer
         from barb.analyzers.shortener import ShortenerAnalyzer
         from barb.analyzers.subdomain import SubdomainAnalyzer
         from barb.analyzers.tld import TLDAnalyzer
+        from barb.analyzers.typosquat import TyposquatAnalyzer
 
         _analyzers = [
             EntropyAnalyzer(),
@@ -52,6 +55,9 @@ def _get_analyzers() -> list:
             ShortenerAnalyzer(),
             EncodingAnalyzer(),
             IPURLAnalyzer(),
+            KeywordAnalyzer(),
+            LexicalAnalyzer(),
+            TyposquatAnalyzer(),
         ]
     return _analyzers
 
@@ -111,6 +117,20 @@ def _analyze_single(
     signals = []
     for analyzer in analyzers:
         signals.extend(analyzer.analyze(parsed))
+
+    # Allowlist suppression: drop noisy signals for known-good domains
+    from barb.allowlist import is_allowlisted
+
+    _SUPPRESSED_ANALYZERS = {"tld", "typosquat", "homoglyph"}
+    _SUPPRESSED_ENTROPY_LABEL = "High entropy domain"
+    if is_allowlisted(parsed.host):
+        signals = [
+            s for s in signals
+            if not (
+                s.analyzer in _SUPPRESSED_ANALYZERS
+                or (s.analyzer == "entropy" and s.label == _SUPPRESSED_ENTROPY_LABEL)
+            )
+        ]
 
     # OSINT enrichment (opt-in, network-dependent)
     if osint:

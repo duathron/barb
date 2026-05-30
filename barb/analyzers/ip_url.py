@@ -37,7 +37,7 @@ class IPURLAnalyzer:
             # legitimate while resolving to the host after '@'.
             signals.append(Signal(
                 analyzer=self.name,
-                severity=SignalSeverity.HIGH,
+                severity=SignalSeverity.CRITICAL,
                 label="Userinfo in URL",
                 detail=(
                     f"URL contains userinfo '{parsed_url.userinfo}' before '@'; "
