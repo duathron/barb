@@ -35,3 +35,19 @@ def test_configurable_weights():
     ]
     score = compute_risk_score(signals, config)
     assert score == 5 * 3.0  # CRITICAL=5 * weight=3.0
+
+
+def test_risk_score_no_float_noise():
+    """B-float: compute_risk_score must return a value rounded to 2 decimal places."""
+    config = AppConfig()
+    # Use a weight that historically produced floating-point noise (e.g. 1.3)
+    config.scoring.weights.entropy = 1.3
+    signals = [
+        Signal(analyzer="entropy", severity=SignalSeverity.HIGH, label="test", detail="test"),
+    ]
+    score = compute_risk_score(signals, config)
+    # Must equal its own rounded form — no trailing noise digits
+    assert score == round(score, 2)
+    # HIGH=3pts * signal_weight=1.0 * analyzer_weight=1.3 = 3.9 (was 3.9000000000000004)
+    assert score == 3.9
+    assert str(score) == str(round(score, 2))

@@ -26,7 +26,7 @@ def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:
     for signal in signals:
         analyzer_weight = weight_map.get(signal.analyzer, 1.0)
         total += signal.severity.points * signal.weight * analyzer_weight
-    return total
+    return round(total, 2)
 
 
 def determine_verdict(score: float, config: AppConfig) -> RiskVerdict:

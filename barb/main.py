@@ -241,10 +241,16 @@ def analyze(
             typer.echo(f"Error: File not found: {file}", err=True)
             raise typer.Exit(3)
         text = file.read_text()
-        all_urls.extend(line.strip() for line in text.splitlines() if line.strip())
+        all_urls.extend(
+            line.strip() for line in text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        )
     if not sys.stdin.isatty() and not urls and not file:
         # Read from stdin
-        all_urls.extend(line.strip() for line in sys.stdin if line.strip())
+        all_urls.extend(
+            line.strip() for line in sys.stdin
+            if line.strip() and not line.strip().startswith("#")
+        )
 
     if not all_urls:
         typer.echo("Error: No URLs provided. Pass URLs as arguments, via --file, or pipe to stdin.", err=True)
@@ -294,9 +300,9 @@ def _output_results(results: list[AnalysisResult], fmt: str, defang: bool) -> No
         from barb.output.export import to_json, to_json_list
 
         if len(results) == 1:
-            typer.echo(to_json(results[0]))
+            typer.echo(to_json(results[0], defang=defang))
         else:
-            typer.echo(to_json_list(results))
+            typer.echo(to_json_list(results, defang=defang))
 
     elif fmt == "csv":
         from barb.output.export import to_csv

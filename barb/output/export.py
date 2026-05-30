@@ -18,15 +18,28 @@ def _default(obj: Any) -> Any:
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-def to_json(result: AnalysisResult, indent: int = 2) -> str:
-    """Serialize a single analysis result to JSON."""
+def to_json(result: AnalysisResult, indent: int = 2, defang: bool = True) -> str:
+    """Serialize a single analysis result to JSON.
+
+    When *defang* is False the ``defanged_url`` field in the output is set to
+    the original URL (no defanging applied), matching ``--no-defang`` semantics.
+    """
     data = result.model_dump(mode="json")
+    if not defang:
+        data["defanged_url"] = result.url
     return json.dumps(data, indent=indent, default=_default, ensure_ascii=False)
 
 
-def to_json_list(results: list[AnalysisResult], indent: int = 2) -> str:
-    """Serialize a list of analysis results to a JSON array."""
+def to_json_list(results: list[AnalysisResult], indent: int = 2, defang: bool = True) -> str:
+    """Serialize a list of analysis results to a JSON array.
+
+    When *defang* is False the ``defanged_url`` field in each object is set to
+    the original URL, matching ``--no-defang`` semantics.
+    """
     data = [r.model_dump(mode="json") for r in results]
+    if not defang:
+        for item, result in zip(data, results):
+            item["defanged_url"] = result.url
     return json.dumps(data, indent=indent, default=_default, ensure_ascii=False)
 
 
