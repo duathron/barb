@@ -139,7 +139,7 @@ def _analyze_single(
 
     # Score and verdict
     score = compute_risk_score(signals, config)
-    verdict = determine_verdict(score, config)
+    verdict = determine_verdict(score, signals, config)
 
     # Build result
     result = AnalysisResult(

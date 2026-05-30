@@ -11,7 +11,7 @@ def test_safe_verdict_no_signals():
     config = AppConfig()
     score = compute_risk_score([], config)
     assert score == 0.0
-    assert determine_verdict(score, config) == RiskVerdict.SAFE
+    assert determine_verdict(score, [], config) == RiskVerdict.SAFE
 
 
 def test_phishing_verdict_critical_signals():
@@ -23,7 +23,7 @@ def test_phishing_verdict_critical_signals():
     ]
     score = compute_risk_score(signals, config)
     assert score > 0
-    verdict = determine_verdict(score, config)
+    verdict = determine_verdict(score, signals, config)
     assert verdict in (RiskVerdict.HIGH_RISK, RiskVerdict.PHISHING)
 
 

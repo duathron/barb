@@ -47,24 +47,42 @@ class HomoglyphAnalyzer:
         signals: list[Signal] = []
         homoglyphs = _get_homoglyphs()
 
-        for char in parsed_url.host:
-            if char in homoglyphs:
-                signals.append(Signal(
-                    analyzer=self.name,
-                    severity=SignalSeverity.CRITICAL,
-                    label="Homoglyph character detected",
-                    detail=f"Character '{char}' (U+{ord(char):04X}) resembles '{homoglyphs[char]}'",
-                ))
-
-        # Mixed-script labels: more than one alphabet inside a single label.
         for label in parsed_url.host.split("."):
+            # Classify this label: does it contain any ASCII Latin letter (a–z / A–Z)?
+            has_ascii_latin = any("a" <= c <= "z" or "A" <= c <= "Z" for c in label)
+            # Does it have any alphabetic character that is non-ASCII?
+            has_non_ascii_alpha = any(c.isalpha() and ord(c) > 127 for c in label)
+            # Scripts present in this label
             scripts = {s for s in (_script_of(c) for c in label) if s is not None}
-            if len(scripts) > 1:
+            is_mixed_script = len(scripts) > 1
+
+            # D2: per-char CRITICAL only when label also has ASCII Latin (mixed-script context)
+            if has_ascii_latin:
+                for char in label:
+                    if char in homoglyphs:
+                        signals.append(Signal(
+                            analyzer=self.name,
+                            severity=SignalSeverity.CRITICAL,
+                            label="Homoglyph character detected",
+                            detail=f"Character '{char}' (U+{ord(char):04X}) resembles '{homoglyphs[char]}'",
+                        ))
+
+            # Mixed-script labels: unchanged HIGH signal
+            if is_mixed_script:
                 signals.append(Signal(
                     analyzer=self.name,
                     severity=SignalSeverity.HIGH,
                     label="Mixed-script domain label",
                     detail=f"Label '{label}' mixes scripts: {', '.join(sorted(scripts))}",
+                ))
+
+            # D4: pure non-ASCII alphabetic label → ONE LOW informational signal
+            if has_non_ascii_alpha and not has_ascii_latin:
+                signals.append(Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.LOW,
+                    label="Internationalized domain (non-ASCII)",
+                    detail=f"Label '{label}' contains only non-ASCII alphabetic characters",
                 ))
 
         return signals
