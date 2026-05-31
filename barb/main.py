@@ -214,11 +214,22 @@ def analyze(
     explain: Annotated[bool, typer.Option("--explain", "-e", help="Add explanation to output")] = False,
     threshold: Annotated[int, typer.Option("--threshold", "-t", help="Minimum risk score to report")] = 0,
     no_defang: Annotated[bool, typer.Option("--no-defang", help="Disable URL defanging in output")] = False,
-    osint: Annotated[bool, typer.Option("--osint", help="Enable OSINT enrichment (DNS + RDAP). Makes network requests."
-                                        )] = False,
+    osint: Annotated[
+        bool,
+        typer.Option(
+            "--osint",
+            help=(
+                "Enable opt-in OSINT enrichment: DNS resolution and RDAP registration lookups about the domain. "
+                "Queries infrastructure metadata only — never fetches the analyzed URL itself."
+            ),
+        ),
+    ] = False,
     no_cache: Annotated[
         bool,
-        typer.Option("--no-cache", help="Bypass the OSINT result cache (force fresh lookups)."),
+        typer.Option(
+            "--no-cache",
+            help="Bypass the OSINT result cache and force fresh DNS/RDAP lookups (default TTL: 6 h).",
+        ),
     ] = False,
 ) -> None:
     """Analyze one or more URLs for phishing indicators."""
