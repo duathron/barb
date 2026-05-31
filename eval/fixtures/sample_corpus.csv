@@ -46,3 +46,10 @@ http://apple-id-locked.support-login.net/unlock,phishing
 # Combo: brand + suspicious TLD + path keywords
 http://paypal-secure.tk/webscr/login,phishing
 http://signin-ebay-account.com/verify/suspended,phishing
+# --- file_ext: double-extension masquerade ---
+http://invoice-update.xyz/files/invoice.pdf.exe,phishing
+# --- file_ext: single exe on suspicious host (scr delivery) ---
+http://secure-update.tk/download/setup.scr,phishing
+# --- file_ext: benign software downloads (must NOT flip to SUSPICIOUS+) ---
+https://github.com/duathron/barb/releases/download/v1.2.0/barb.tar.gz,benign
+https://www.python.org/ftp/python/3.13.0/python-3.13.0.exe,benign

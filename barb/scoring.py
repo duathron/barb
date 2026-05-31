@@ -35,6 +35,7 @@ def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:
         "typosquat": weights.typosquat,
         "keyword": weights.keyword,
         "lexical": weights.lexical,
+        "file_ext": weights.file_ext,
     }
     total = 0.0
     for signal in signals:

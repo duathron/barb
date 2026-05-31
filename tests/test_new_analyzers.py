@@ -1,8 +1,9 @@
-"""Tests for keyword, typosquat, lexical analyzers and allowlist suppression."""
+"""Tests for keyword, typosquat, lexical, file_ext analyzers and allowlist suppression."""
 
 from __future__ import annotations
 
 from barb.allowlist import _registrable_domain, is_allowlisted
+from barb.analyzers.file_ext import FileExtAnalyzer, _path_extensions
 from barb.analyzers.keyword import KeywordAnalyzer
 from barb.analyzers.lexical import LexicalAnalyzer
 from barb.analyzers.typosquat import TyposquatAnalyzer
@@ -339,3 +340,194 @@ class TestAllowlistSuppression:
         result = _analyze_single("https://paypal-login-secure.com/verify", config)
         # brand should fire (not suppressed)
         assert any(s.analyzer == "brand" for s in result.signals)
+
+
+# ---------------------------------------------------------------------------
+# FileExtAnalyzer
+# ---------------------------------------------------------------------------
+
+
+class TestPathExtensions:
+    """Unit tests for the _path_extensions helper."""
+
+    def test_double_extension(self):
+        assert _path_extensions("/files/invoice.pdf.exe") == (".pdf", ".exe")
+
+    def test_single_extension(self):
+        assert _path_extensions("/download/setup.exe") == ("", ".exe")
+
+    def test_no_extension(self):
+        assert _path_extensions("/some/path/readme") == ("", "")
+
+    def test_root_path(self):
+        assert _path_extensions("/") == ("", "")
+
+    def test_case_insensitive_lowercasing(self):
+        pen, fin = _path_extensions("/Files/INVOICE.PDF.EXE")
+        assert pen == ".pdf"
+        assert fin == ".exe"
+
+    def test_archive_extension(self):
+        assert _path_extensions("/releases/barb.tar.gz") == (".tar", ".gz")
+
+    def test_archive_single(self):
+        assert _path_extensions("/downloads/data.zip") == ("", ".zip")
+
+
+class TestFileExtAnalyzer:
+    def setup_method(self):
+        self.analyzer = FileExtAnalyzer()
+
+    def test_name(self):
+        assert self.analyzer.name == "file_ext"
+
+    # --- Double-extension masquerade (HIGH) ---
+
+    def test_pdf_exe_double_extension_is_high(self):
+        parsed = parse_url("http://invoice-update.xyz/files/invoice.pdf.exe")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.HIGH
+        assert signals[0].label == "Double extension masquerade"
+        assert ".pdf" in signals[0].detail
+        assert ".exe" in signals[0].detail
+
+    def test_jpg_scr_double_extension_is_high(self):
+        parsed = parse_url("http://evil.com/photo.jpg.scr")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.HIGH
+
+    def test_doc_vbs_double_extension_is_high(self):
+        parsed = parse_url("http://evil.com/report.doc.vbs")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.HIGH
+
+    def test_double_ext_case_insensitive(self):
+        parsed = parse_url("http://evil.com/INVOICE.PDF.EXE")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.HIGH
+
+    # --- Single executable/script extension (LOW) ---
+
+    def test_single_exe_is_low(self):
+        parsed = parse_url("http://secure-update.tk/download/setup.exe")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.LOW
+        assert signals[0].label == "Executable file extension in path"
+
+    def test_single_scr_is_low(self):
+        parsed = parse_url("http://secure-update.tk/download/setup.scr")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.LOW
+
+    def test_single_bat_is_low(self):
+        parsed = parse_url("http://evil.com/run.bat")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.LOW
+
+    def test_single_ps1_is_low(self):
+        parsed = parse_url("http://evil.com/payload.ps1")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.LOW
+
+    # --- Archive extension (INFO) ---
+
+    def test_zip_is_info(self):
+        parsed = parse_url("https://example.com/downloads/data.zip")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.INFO
+        assert signals[0].label == "Archive file extension in path"
+
+    def test_tar_gz_is_info(self):
+        # .tar.gz — final ext is .gz (archive INFO)
+        parsed = parse_url("https://github.com/duathron/barb/releases/download/v1.2.0/barb.tar.gz")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.INFO
+
+    def test_iso_is_info(self):
+        parsed = parse_url("https://example.com/distro.iso")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.INFO
+
+    # --- No extension / no signal ---
+
+    def test_no_extension_no_signal(self):
+        parsed = parse_url("https://example.com/about")
+        signals = self.analyzer.analyze(parsed)
+        assert signals == []
+
+    def test_root_path_no_signal(self):
+        parsed = parse_url("https://example.com/")
+        signals = self.analyzer.analyze(parsed)
+        assert signals == []
+
+    def test_html_extension_no_signal(self):
+        parsed = parse_url("https://example.com/page.html")
+        signals = self.analyzer.analyze(parsed)
+        assert signals == []
+
+    def test_php_extension_no_signal(self):
+        # .php is not in exec/archive lists
+        parsed = parse_url("https://example.com/index.php")
+        signals = self.analyzer.analyze(parsed)
+        assert signals == []
+
+    # --- Benign legit downloads do NOT trigger HIGH ---
+
+    def test_legit_python_exe_download_is_low_not_high(self):
+        """python.org .exe installer — allowlisted host, single exe → LOW only."""
+        parsed = parse_url("https://www.python.org/ftp/python/3.13.0/python-3.13.0.exe")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.LOW
+        # Confirm it is NOT a double-extension masquerade
+        assert signals[0].label == "Executable file extension in path"
+
+    def test_legit_github_tarball_is_info_not_high(self):
+        """GitHub release tarball — single .gz archive → INFO only."""
+        parsed = parse_url("https://github.com/duathron/barb/releases/download/v1.2.0/barb.tar.gz")
+        signals = self.analyzer.analyze(parsed)
+        assert len(signals) == 1
+        assert signals[0].severity == SignalSeverity.INFO
+
+    # --- Integration: allowlisted hosts suppress LOW score contribution ---
+
+    def test_legit_exe_on_allowlisted_host_stays_below_suspicious(self):
+        """python.org .exe on allowlisted host must stay below SUSPICIOUS verdict."""
+        from barb.config import AppConfig
+        from barb.main import _analyze_single
+        from barb.models import RiskVerdict
+
+        config = AppConfig()
+        result = _analyze_single("https://www.python.org/ftp/python/3.13.0/python-3.13.0.exe", config)
+        suspicious_verdicts = {RiskVerdict.SUSPICIOUS, RiskVerdict.HIGH_RISK, RiskVerdict.PHISHING}
+        assert result.verdict not in suspicious_verdicts, (
+            f"Legit python.org .exe download flipped to {result.verdict} — "
+            f"score={result.risk_score}, signals={[s.label for s in result.signals]}"
+        )
+
+    def test_legit_tarball_on_allowlisted_host_stays_below_suspicious(self):
+        """GitHub release tarball on allowlisted host must stay below SUSPICIOUS verdict."""
+        from barb.config import AppConfig
+        from barb.main import _analyze_single
+        from barb.models import RiskVerdict
+
+        config = AppConfig()
+        result = _analyze_single(
+            "https://github.com/duathron/barb/releases/download/v1.2.0/barb.tar.gz", config
+        )
+        suspicious_verdicts = {RiskVerdict.SUSPICIOUS, RiskVerdict.HIGH_RISK, RiskVerdict.PHISHING}
+        assert result.verdict not in suspicious_verdicts, (
+            f"Legit GitHub tarball flipped to {result.verdict} — "
+            f"score={result.risk_score}, signals={[s.label for s in result.signals]}"
+        )

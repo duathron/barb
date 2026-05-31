@@ -31,12 +31,13 @@ _analyzers = None
 
 
 def _get_analyzers() -> list:
-    """Lazily instantiate all 11 heuristic analyzers."""
+    """Lazily instantiate all 12 heuristic analyzers."""
     global _analyzers
     if _analyzers is None:
         from barb.analyzers.brand import BrandAnalyzer
         from barb.analyzers.encoding import EncodingAnalyzer
         from barb.analyzers.entropy import EntropyAnalyzer
+        from barb.analyzers.file_ext import FileExtAnalyzer
         from barb.analyzers.homoglyph import HomoglyphAnalyzer
         from barb.analyzers.ip_url import IPURLAnalyzer
         from barb.analyzers.keyword import KeywordAnalyzer
@@ -58,6 +59,7 @@ def _get_analyzers() -> list:
             KeywordAnalyzer(),
             LexicalAnalyzer(),
             TyposquatAnalyzer(),
+            FileExtAnalyzer(),
         ]
     return _analyzers
 
