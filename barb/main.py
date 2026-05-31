@@ -211,7 +211,10 @@ def _explain(result: AnalysisResult, config: AppConfig) -> str:
 def analyze(
     urls: Annotated[Optional[list[str]], typer.Argument(help="One or more URLs to analyze")] = None,
     file: Annotated[Optional[Path], typer.Option("--file", "-f", help="File containing URLs (one per line)")] = None,
-    output: Annotated[str, typer.Option("--output", "-o", help="Output format: rich|console|json|csv")] = "rich",
+    output: Annotated[  # noqa: E501
+        str,
+        typer.Option("--output", "-o", help="Output format: rich|console|json|ndjson|csv|stix"),
+    ] = "rich",
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress banner")] = False,
     explain: Annotated[bool, typer.Option("--explain", "-e", help="Add explanation to output")] = False,
     threshold: Annotated[int, typer.Option("--threshold", "-t", help="Minimum risk score to report")] = 0,
@@ -316,6 +319,16 @@ def _output_results(results: list[AnalysisResult], fmt: str, defang: bool) -> No
             typer.echo(to_json(results[0], defang=defang))
         else:
             typer.echo(to_json_list(results, defang=defang))
+
+    elif fmt == "ndjson":
+        from barb.output.export import to_ndjson
+
+        typer.echo(to_ndjson(results, defang=defang), nl=False)
+
+    elif fmt == "stix":
+        from barb.output.export import to_stix
+
+        typer.echo(to_stix(results))
 
     elif fmt == "csv":
         from barb.output.export import to_csv
