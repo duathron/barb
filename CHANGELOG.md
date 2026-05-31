@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-31
+
+### Added
+- `file_ext` analyzer (12th offline heuristic) — flags suspicious file extensions in the URL path: double-extension masquerade (e.g. `invoice.pdf.exe`) → HIGH; single executable/script extension (e.g. `.exe`, `.ps1`, `.sh`) → LOW; archive extension (e.g. `.zip`, `.tar.gz`) → INFO.
+- NDJSON output format (`-o ndjson`) — one compact JSON object per line, suitable for streaming pipelines and log aggregators.
+- STIX 2.1 export (`-o stix`) — emits a STIX bundle containing `indicator` objects for URLs with verdict SUSPICIOUS or higher; uses deterministic IDs and maps verdict to STIX confidence.
+- Offline evaluation harness (`eval/`, dev tool) — measures precision, recall, and F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate.
+- Top-level `--version` flag (`barb --version`) in addition to the existing `barb version` subcommand.
+
+### Changed
+- Rich terminal output now hides INFO-severity signals when the overall verdict is SAFE, reducing noise in clean results. Machine formats (JSON, NDJSON, CSV, STIX) still include all signals.
+
+### Fixed
+- Empty or malformed URLs (empty host, whitespace in host) are now rejected with a clear error message and exit code 3, instead of being silently scored SAFE.
+- Unknown `--output` values are now rejected with a clear error message and exit code 3, instead of silently falling back to rich output.
+- A stderr note is printed when `--explain` is combined with `-o stix`, since `--explain` has no effect on that machine format.
+
 ## [1.2.0] - 2026-05-30
 
 ### Added
@@ -51,7 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - URL defanging for TTY output. Exit codes: 0 safe/low, 1 suspicious/high, 2 phishing, 3 error.
 - CI (pytest matrix + ruff) and PyPI publishing via OIDC Trusted Publisher.
 
-[Unreleased]: https://github.com/duathron/barb/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/duathron/barb/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/duathron/barb/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/duathron/barb/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/duathron/barb/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/duathron/barb/releases/tag/v1.0.0
