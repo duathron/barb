@@ -35,3 +35,6 @@ CLAUDE.md
 # Environment
 .env
 .env.local
+
+# Eval: real downloaded corpora (OpenPhish, PhishTank, Tranco) — never commit
+eval/corpus/

@@ -1,0 +1,48 @@
+url,label
+# --- Benign: well-known safe domains ---
+https://www.google.com,benign
+https://www.google.com/search?q=phishing+detection,benign
+https://github.com/duathron/barb,benign
+https://en.wikipedia.org/wiki/Phishing,benign
+https://www.microsoft.com/en-us/security,benign
+https://www.apple.com/iphone,benign
+https://www.amazon.com/s?k=books,benign
+https://www.paypal.com/us/home,benign
+https://www.chase.com/personal/checking-account,benign
+https://www.bankofamerica.com/online-banking,benign
+https://stackoverflow.com/questions/tagged/python,benign
+https://www.cloudflare.com,benign
+https://www.reddit.com/r/netsec,benign
+https://twitter.com/home,benign
+https://www.linkedin.com/in/example,benign
+https://pypi.org/project/barb-phish,benign
+# --- Phishing: synthetic/obvious lookalike patterns ---
+# Userinfo trick (credential obfuscation)
+http://paypal.com@evil-login.tk/verify,phishing
+https://amazon.com@secure-checkout.xyz/payment,phishing
+# IP-based hosts (RFC 5737 test IPs)
+http://192.0.2.10/paypal-login/secure/verify,phishing
+http://192.0.2.55/account/signin.php,phishing
+http://192.0.2.100/bank/login?user=admin,phishing
+# Brand + homoglyph / typosquat in domain
+http://paypa1-secure-login.verify-account.xyz/signin,phishing
+http://arnazon-account-update.verify-login.ml/confirm,phishing
+http://micros0ft-verify.login-secure.tk/windows,phishing
+# Punycode/homoglyph lookalike
+http://xn--pypl-0ra.com/login,phishing
+# High-entropy host + suspicious TLD
+http://a7f3k9z2m8p1.tk/confirm,phishing
+http://q9w2e5r8t1y4.ml/update,phishing
+# Excessive subdomains
+http://secure.login.verify.paypal-account.suspicious-domain.com/update,phishing
+http://account.update.billing.amazon-secure.info/signin,phishing
+# URL shortener style (suspicious redirect chains)
+http://bit.ly.login-now.tk/xK9mPq,phishing
+# Encoding tricks
+http://example.com/%70%61%79%70%61%6C/login,phishing
+# Keyword-heavy phish paths
+http://secure-paypal-update.com/verify/account/login/confirm/password,phishing
+http://apple-id-locked.support-login.net/unlock,phishing
+# Combo: brand + suspicious TLD + path keywords
+http://paypal-secure.tk/webscr/login,phishing
+http://signin-ebay-account.com/verify/suspended,phishing
