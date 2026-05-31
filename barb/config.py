@@ -31,6 +31,7 @@ class ScoringWeights(BaseModel):
     typosquat: float = 1.3
     keyword: float = 0.6
     lexical: float = 0.5
+    file_ext: float = 1.0
 
 
 class ScoringThresholds(BaseModel):

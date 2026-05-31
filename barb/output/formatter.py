@@ -55,14 +55,18 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
     border_style = _VERDICT_STYLE.get(result.verdict, "white")
     console.print(Panel(grid, title="barb", border_style=border_style))
 
-    # Signal table
-    if result.signals:
+    # Signal table — for SAFE verdict, omit INFO-severity signals
+    display_signals = result.signals
+    if result.verdict == RiskVerdict.SAFE:
+        display_signals = [s for s in result.signals if s.severity != SignalSeverity.INFO]
+
+    if display_signals:
         sig_table = Table(box=box.SIMPLE, show_edge=False, pad_edge=False)
         sig_table.add_column("Severity", style="bold", width=10)
         sig_table.add_column("Analyzer", style="cyan", width=12)
         sig_table.add_column("Finding")
 
-        for signal in sorted(result.signals, key=lambda s: s.severity.points, reverse=True):
+        for signal in sorted(display_signals, key=lambda s: s.severity.points, reverse=True):
             sev_style = _SEVERITY_STYLE.get(signal.severity, "white")
             sig_table.add_row(
                 Text(signal.severity.value, style=sev_style),
@@ -70,6 +74,9 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
                 signal.detail,
             )
         console.print(sig_table)
+    elif result.signals and result.verdict == RiskVerdict.SAFE:
+        # All signals were INFO — show clean placeholder
+        console.print("[dim]No significant signals[/dim]")
 
     # Explanation
     if result.explanation:

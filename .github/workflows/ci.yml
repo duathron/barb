@@ -34,3 +34,8 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+      # Synthetic-fixture regression guard: no false-positive regression (precision must stay 1.0)
+      # and no large detection drop (recall >= 0.70). Current baseline: precision 1.00 / recall 0.76.
+      - name: Detection-quality gate (eval)
+        run: python -m eval.run_eval --min-precision 1.0 --min-recall 0.70

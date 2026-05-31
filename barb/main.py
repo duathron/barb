@@ -17,11 +17,28 @@ from barb.models import AnalysisResult
 from barb.scoring import compute_risk_score, determine_verdict
 from barb.url_parser import parse_url
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"barb {__version__}")
+        raise typer.Exit(0)
+
+
 app = typer.Typer(
     name="barb",
     help="Heuristic phishing URL analyzer for SOC/DFIR workflows.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _app_callback(
+    version: Annotated[
+        Optional[bool],
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show version and exit."),
+    ] = None,
+) -> None:
+    """Heuristic phishing URL analyzer for SOC/DFIR workflows."""
 
 # ---------------------------------------------------------------------------
 # Analyzer registry — lazily instantiated
@@ -31,12 +48,13 @@ _analyzers = None
 
 
 def _get_analyzers() -> list:
-    """Lazily instantiate all 11 heuristic analyzers."""
+    """Lazily instantiate all 12 heuristic analyzers."""
     global _analyzers
     if _analyzers is None:
         from barb.analyzers.brand import BrandAnalyzer
         from barb.analyzers.encoding import EncodingAnalyzer
         from barb.analyzers.entropy import EntropyAnalyzer
+        from barb.analyzers.file_ext import FileExtAnalyzer
         from barb.analyzers.homoglyph import HomoglyphAnalyzer
         from barb.analyzers.ip_url import IPURLAnalyzer
         from barb.analyzers.keyword import KeywordAnalyzer
@@ -58,6 +76,7 @@ def _get_analyzers() -> list:
             KeywordAnalyzer(),
             LexicalAnalyzer(),
             TyposquatAnalyzer(),
+            FileExtAnalyzer(),
         ]
     return _analyzers
 
@@ -209,7 +228,10 @@ def _explain(result: AnalysisResult, config: AppConfig) -> str:
 def analyze(
     urls: Annotated[Optional[list[str]], typer.Argument(help="One or more URLs to analyze")] = None,
     file: Annotated[Optional[Path], typer.Option("--file", "-f", help="File containing URLs (one per line)")] = None,
-    output: Annotated[str, typer.Option("--output", "-o", help="Output format: rich|console|json|csv")] = "rich",
+    output: Annotated[  # noqa: E501
+        str,
+        typer.Option("--output", "-o", help="Output format: rich|console|json|ndjson|csv|stix"),
+    ] = "rich",
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress banner")] = False,
     explain: Annotated[bool, typer.Option("--explain", "-e", help="Add explanation to output")] = False,
     threshold: Annotated[int, typer.Option("--threshold", "-t", help="Minimum risk score to report")] = 0,
@@ -234,6 +256,19 @@ def analyze(
 ) -> None:
     """Analyze one or more URLs for phishing indicators."""
     config = load_config()
+
+    # Validate output format before doing any work
+    _VALID_FORMATS = {"rich", "console", "json", "ndjson", "csv", "stix"}
+    if output not in _VALID_FORMATS:
+        typer.echo(
+            f"Error: Unknown output format '{output}'. Valid: rich, console, json, ndjson, csv, stix",
+            err=True,
+        )
+        raise typer.Exit(3)
+
+    # Warn if --explain is used with stix (no effect)
+    if explain and output == "stix":
+        typer.echo("Note: --explain has no effect with -o stix (machine format).", err=True)
 
     # Show banner for rich/console output
     if output in ("rich", "console"):
@@ -314,6 +349,16 @@ def _output_results(results: list[AnalysisResult], fmt: str, defang: bool) -> No
             typer.echo(to_json(results[0], defang=defang))
         else:
             typer.echo(to_json_list(results, defang=defang))
+
+    elif fmt == "ndjson":
+        from barb.output.export import to_ndjson
+
+        typer.echo(to_ndjson(results, defang=defang), nl=False)
+
+    elif fmt == "stix":
+        from barb.output.export import to_stix
+
+        typer.echo(to_stix(results))
 
     elif fmt == "csv":
         from barb.output.export import to_csv

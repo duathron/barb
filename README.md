@@ -17,14 +17,16 @@
 
 ## Features
 
-- **11 heuristic analyzers**: entropy, homoglyph, TLD, subdomain, brand impersonation, URL shortener, encoding abuse, IP-based URLs, typosquat, keyword, lexical
+- **12 heuristic analyzers**: entropy, homoglyph, TLD, subdomain, brand impersonation, URL shortener, encoding abuse, IP-based URLs, typosquat, keyword, lexical, file extension
 - **5-tier verdict**: SAFE / LOW_RISK / SUSPICIOUS / HIGH_RISK / PHISHING with severity-floor escalation
 - **Zero API keys required** for core analysis — offline, no external calls
 - **Opt-in `--osint` enrichment**: DNS resolution + RDAP registration lookups (stdlib only, no API key); never fetches the analyzed URL
 - **Allowlist false-positive suppression**: ~71 known-good domains suppress noisy domain-based signals; path/query signals still fire
 - **OSINT result cache**: SQLite cache at `~/.barb/cache.db` (default TTL 6 h); bypass with `--no-cache`
-- **Output formats**: Rich tables, console, JSON, CSV
+- **Output formats**: Rich tables, console, JSON, NDJSON, CSV, STIX 2.1
 - **`--explain` flag**: template-based explanation by default, optional LLM (Anthropic Claude, OpenAI)
+- **`--version` flag**: report the installed version (`barb --version` or `barb version`)
+- **Offline eval harness** (`eval/`): measures precision/recall/F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate
 - **Batch processing**: analyze URL lists from files, stdin, or multiple arguments
 - **Automation-ready**: exit codes (0=safe, 1=suspicious, 2=phishing, 3=error), `--threshold` filtering
 - **IOC defanging**: automatic in terminal output (`hxxps[://]evil[.]com`)
@@ -129,6 +131,22 @@ barb analyze http://evil.tk/login -o json
 }
 ```
 
+### NDJSON Output
+
+One compact JSON object per line — suitable for streaming pipelines and log aggregators.
+
+```bash
+barb analyze http://evil.tk/login -o ndjson
+```
+
+### STIX 2.1 Output
+
+Emits a STIX bundle with `indicator` objects for SUSPICIOUS / HIGH_RISK / PHISHING verdicts (deterministic IDs, confidence mapped from verdict).
+
+```bash
+barb analyze http://evil.tk/login -o stix
+```
+
 ---
 
 ## Analyzers
@@ -148,6 +166,7 @@ barb analyze http://evil.tk/login -o json
 | **Typosquat** | ASCII brand lookalikes via Levenshtein 1–2 + digit↔letter swaps; skips official brand domains | `paypa1.com`, `g00gle.com` |
 | **Keyword** | Phishing keywords in path/query (login, verify, secure, webscr, bank, …); one aggregated LOW signal | `/login/verify-account` |
 | **Lexical** | URL length, hyphen count, digit ratio; LOW signals | `my-secure-bank-update-2024.com` |
+| **File Ext** | Suspicious file extensions in the URL path; double-extension masquerade → HIGH, single executable/script → LOW, archive → INFO | `invoice.pdf.exe`, `setup.ps1` |
 
 ### OSINT enrichers (`--osint`)
 
@@ -203,7 +222,7 @@ osint:
 |---------|------|--------------------|-----------:|-----------|
 | Offline analysis | Core offline; opt-in `--osint` for DNS/RDAP | No | No | No |
 | API key required | No | Yes | Yes | Optional |
-| Heuristic detection | 11 analyzers | Signature-based | Browser-based | Community |
+| Heuristic detection | 12 analyzers | Signature-based | Browser-based | Community |
 | CLI tool | Yes | Web/API | Web/API | Web/API |
 | LLM explanation | Optional | No | No | No |
 | Self-hosted | Yes | No | No | No |
