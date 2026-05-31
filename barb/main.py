@@ -17,11 +17,28 @@ from barb.models import AnalysisResult
 from barb.scoring import compute_risk_score, determine_verdict
 from barb.url_parser import parse_url
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"barb {__version__}")
+        raise typer.Exit(0)
+
+
 app = typer.Typer(
     name="barb",
     help="Heuristic phishing URL analyzer for SOC/DFIR workflows.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _app_callback(
+    version: Annotated[
+        Optional[bool],
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show version and exit."),
+    ] = None,
+) -> None:
+    """Heuristic phishing URL analyzer for SOC/DFIR workflows."""
 
 # ---------------------------------------------------------------------------
 # Analyzer registry — lazily instantiated
@@ -239,6 +256,19 @@ def analyze(
 ) -> None:
     """Analyze one or more URLs for phishing indicators."""
     config = load_config()
+
+    # Validate output format before doing any work
+    _VALID_FORMATS = {"rich", "console", "json", "ndjson", "csv", "stix"}
+    if output not in _VALID_FORMATS:
+        typer.echo(
+            f"Error: Unknown output format '{output}'. Valid: rich, console, json, ndjson, csv, stix",
+            err=True,
+        )
+        raise typer.Exit(3)
+
+    # Warn if --explain is used with stix (no effect)
+    if explain and output == "stix":
+        typer.echo("Note: --explain has no effect with -o stix (machine format).", err=True)
 
     # Show banner for rich/console output
     if output in ("rich", "console"):

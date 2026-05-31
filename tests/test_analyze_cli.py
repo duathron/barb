@@ -100,3 +100,40 @@ def test_json_default_defangs_url():
     defanged = data["defanged_url"]
     assert defanged != url, "expected defanged URL to differ from original"
     assert "hxxps" in defanged or "[.]" in defanged, f"unexpected defanged form: {defanged!r}"
+
+
+# Fix 4: empty URL → exit 3
+def test_analyze_empty_url_exits_3():
+    result = runner.invoke(app, ["analyze", "", "-q"])
+    assert result.exit_code == 3
+    assert "Error" in result.output or "Error" in (result.stderr or "")
+
+
+# Fix 5: non-URL string → exit 3
+def test_analyze_not_a_url_exits_3():
+    result = runner.invoke(app, ["analyze", "not a url", "-q"])
+    assert result.exit_code == 3
+
+
+# Fix 6: unknown output format → exit 3 with error message
+def test_analyze_unknown_output_format_exits_3():
+    result = runner.invoke(app, ["analyze", "https://example.com", "-o", "badformat", "-q"])
+    assert result.exit_code == 3
+    combined = result.output + (result.stderr or "")
+    assert "Unknown output format" in combined
+    assert "badformat" in combined
+
+
+# Fix 1: --explain with -o stix → stderr note, stix bundle still produced
+def test_analyze_explain_stix_warns():
+    result = runner.invoke(app, ["analyze", "https://example.com", "-o", "stix", "-e", "-q"])
+    combined = result.output + (result.stderr or "")
+    assert "--explain has no effect" in combined or "no effect" in combined
+
+
+# Fix 3: --version eager option
+def test_version_flag():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "barb" in result.output
+    assert "1.2.0" in result.output

@@ -16,6 +16,8 @@ def parse_url(url: str) -> ParsedURL:
     Raises ValueError if the URL exceeds the length cap or is unparseable.
     """
     url = url.strip().rstrip("\x00")
+    if not url:
+        raise ValueError("Empty URL")
     if len(url) > _MAX_URL_LEN:
         raise ValueError(f"URL exceeds maximum length of {_MAX_URL_LEN} characters")
 
@@ -30,6 +32,12 @@ def parse_url(url: str) -> ParsedURL:
         is_ip = True
     except ValueError:
         pass
+
+    # Validate host
+    if not host and not is_ip:
+        raise ValueError("Invalid URL: no host")
+    if any(c <= " " or c == "\x7f" for c in host):
+        raise ValueError("Invalid URL: host contains whitespace")
 
     is_punycode = host.startswith("xn--") or ".xn--" in host
 
