@@ -244,6 +244,21 @@ pytest tests/ -v
 - Config directory secured with 0o700 permissions
 - LLM and OSINT dependencies are optional extras — core install has zero network deps
 
+### Privacy footprint of `--osint`
+
+The offline core makes **zero** outbound connections. When you opt into `--osint`, barb makes three kinds of request — **never to the analyzed host itself**:
+
+| Connection | Endpoint | What it reveals | Notes |
+|------------|----------|-----------------|-------|
+| DNS resolution | Your **system resolver** (`/etc/resolv.conf`: ISP/router/corporate DNS, port 53) | The domain being looked up | Same lookup any browser would do |
+| RDAP bootstrap | `https://data.iana.org/rdap/dns.json` | That you use barb/RDAP | Fetched at most once per 7 days (cached at `~/.barb/rdap_bootstrap.json`) |
+| RDAP query | The TLD's registry RDAP server (e.g. `rdap.verisign.com` for `.com`, `rdap.pir.org` for `.org`) | The domain being investigated | No API key; stdlib `urllib` only |
+
+- The suspect host is **never contacted** — no HTTP GET/HEAD to the URL, no DNS beacon to attacker-controlled infrastructure beyond normal name resolution.
+- No credentials are ever transmitted.
+- OSINT results are cached per host in `~/.barb/cache.db` (default TTL 6 h), so repeat lookups make no network calls; `--no-cache` forces fresh requests.
+- All OSINT calls are **fail-open**: a timeout or error simply drops the enrichment signals and analysis continues offline.
+
 ---
 
 ## License
