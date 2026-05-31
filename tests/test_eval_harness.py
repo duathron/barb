@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from barb.models import RiskVerdict
-from eval.run_eval import EvalMetrics, load_corpus, run_eval
+from eval.run_eval import EvalMetrics, gate_failures, load_corpus, run_eval
 
 _FIXTURE = Path(__file__).parent.parent / "eval" / "fixtures" / "sample_corpus.csv"
 
@@ -144,3 +144,45 @@ def test_metrics_to_dict_has_all_keys():
         "false_positive_rate", "tier_breakdown",
     }
     assert required.issubset(d.keys())
+
+
+# ---------------------------------------------------------------------------
+# gate_failures unit tests (no analyzer, no fixture run)
+# ---------------------------------------------------------------------------
+
+
+def _metrics(tp: int, fp: int, fn: int, tn: int = 0) -> EvalMetrics:
+    """Build a minimal EvalMetrics with known confusion-matrix values."""
+    return EvalMetrics(tp=tp, fp=fp, tn=tn, fn=fn)
+
+
+def test_gate_failures_all_pass():
+    """Metrics above both floors → empty failures list."""
+    # precision = 4/(4+0) = 1.0, recall = 4/(4+1) = 0.8
+    m = _metrics(tp=4, fp=0, fn=1)
+    assert gate_failures(m, min_precision=1.0, min_recall=0.70) == []
+
+
+def test_gate_failures_precision_floor():
+    """Precision below floor → failure message mentioning 'precision'."""
+    # precision = 3/(3+2) = 0.6, recall = 3/(3+0) = 1.0
+    m = _metrics(tp=3, fp=2, fn=0)
+    failures = gate_failures(m, min_precision=0.9, min_recall=None)
+    assert len(failures) == 1
+    assert "precision" in failures[0].lower()
+
+
+def test_gate_failures_recall_floor():
+    """Recall below floor → failure message mentioning 'recall'."""
+    # precision = 2/(2+0) = 1.0, recall = 2/(2+3) = 0.4
+    m = _metrics(tp=2, fp=0, fn=3)
+    failures = gate_failures(m, min_precision=None, min_recall=0.70)
+    assert len(failures) == 1
+    assert "recall" in failures[0].lower()
+
+
+def test_gate_failures_none_floors():
+    """No floors set → always returns empty list regardless of metrics."""
+    # precision = 0.0 (tp=0), recall = 0.0 (tp=0)
+    m = _metrics(tp=0, fp=5, fn=5)
+    assert gate_failures(m, min_precision=None, min_recall=None) == []

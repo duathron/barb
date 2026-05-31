@@ -249,6 +249,35 @@ def _print_json(metrics: EvalMetrics, alert_tier: RiskVerdict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def gate_failures(
+    metrics: EvalMetrics,
+    min_precision: Optional[float],
+    min_recall: Optional[float],
+) -> list[str]:
+    """Return a list of human-readable failure strings for unmet metric floors.
+
+    An empty list means all gates passed (or no floors were set).
+
+    Args:
+        metrics:       Populated EvalMetrics instance.
+        min_precision: Required minimum precision (None = no gate).
+        min_recall:    Required minimum recall (None = no gate).
+
+    Returns:
+        List of failure strings; empty when all floors are satisfied.
+    """
+    failures: list[str] = []
+    if min_precision is not None and metrics.precision < min_precision:
+        failures.append(
+            f"precision gate FAILED: actual={metrics.precision:.4f} < required={min_precision:.4f}"
+        )
+    if min_recall is not None and metrics.recall < min_recall:
+        failures.append(
+            f"recall gate FAILED: actual={metrics.recall:.4f} < required={min_recall:.4f}"
+        )
+    return failures
+
+
 def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="eval.run_eval",
@@ -277,6 +306,22 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Emit metrics as JSON to stdout instead of a Rich table.",
     )
+    parser.add_argument(
+        "--min-precision",
+        dest="min_precision",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help="Minimum required precision (0.0–1.0). Exits 1 if below this floor.",
+    )
+    parser.add_argument(
+        "--min-recall",
+        dest="min_recall",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help="Minimum required recall (0.0–1.0). Exits 1 if below this floor.",
+    )
     return parser.parse_args(argv)
 
 
@@ -294,6 +339,13 @@ def main(argv: Optional[list[str]] = None) -> None:
         _print_json(metrics, alert_tier)
     else:
         _print_rich(metrics, alert_tier)
+
+    # Threshold-gate: check user-supplied precision/recall floors.
+    failures = gate_failures(metrics, args.min_precision, args.min_recall)
+    if failures:
+        for msg in failures:
+            print(f"GATE: {msg}", file=sys.stderr)
+        sys.exit(1)
 
     # Exit with non-zero when evaluation produced zero recall (nothing detected)
     # but only if there were actual phishing samples present.
