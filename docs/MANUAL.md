@@ -410,6 +410,57 @@ barb analyze "https://suspicious-site.tk/paypal-login" --osint -q
 
 ---
 
+## Detection quality (measured)
+
+### Methodology
+
+The eval harness in `eval/` scores barb against a labeled URL corpus. The corpus is built from two feeds:
+
+- **Phishing:** 300 URLs from the OpenPhish community feed (`eval/fetch_corpus.py` fetches and labels them).
+- **Benign:** 500 URLs from the Tranco top-500 list (most-popular domains, expected clean).
+
+Alert tier: verdict ≥ SUSPICIOUS counts as a positive detection.
+
+### Results — v1.4.1 (offline core, snapshot 2026-06-01)
+
+| Metric | Value | Detail |
+|--------|-------|--------|
+| Precision | **1.00** | 0 false positives out of 500 benign URLs |
+| Recall | **0.07** | 22 of 300 phishing URLs caught |
+| False-positive rate | **0.00** | 0 of 500 benign URLs flagged |
+
+### Interpretation
+
+> [!IMPORTANT]
+> barb is a **high-precision URL-structure pre-filter**. When it emits SUSPICIOUS or higher, that verdict is reliable (precision 1.00 on this corpus). It is **not a standalone phishing catch-all**.
+>
+> Low recall is by design. barb inspects URL structure only and never fetches the URL, so phishing campaigns that use clean-looking URLs on abused legitimate hosting (`github.io`, `pages.dev`, plain `.com`, short paths) fall below the detection threshold. That is an inherent limit of URL-only heuristics, not a bug.
+>
+> Close the recall gap with the downstream pipeline:
+> - `--osint` for fresh-domain signals (RDAP registration age, crt.sh certificate recency).
+> - **vex** for VirusTotal / AbuseIPDB reputation lookup on barb's flagged URLs.
+> - **sift** for alert correlation across the full event stream.
+
+### CI regression gate vs. field measurement
+
+The repo contains a synthetic fixture (`eval/fixtures/`) that drives a pytest-based regression gate. That fixture reports precision 1.00 / recall 0.76 — numbers intentionally higher than the real corpus because the fixture is constructed from known-bad URL patterns that exercise every analyzer. It catches score regressions between releases; it is **not** a field performance claim.
+
+The real corpus uses live feeds, so the numbers above are a reproducible snapshot, not a fixed guarantee. Phishing feed composition changes over time.
+
+### Reproduce the numbers
+
+```bash
+# Build the corpus (fetches OpenPhish + Tranco, writes eval/corpus/real.csv)
+python -m eval.fetch_corpus
+
+# Score barb against it and print precision/recall/F1
+python -m eval.run_eval --corpus eval/corpus/real.csv
+```
+
+Both scripts are in the repo root. No extra dependencies beyond `barb-phish[dev]`.
+
+---
+
 ## Explanations
 
 Pass `--explain` to append a plain-language explanation of the signals to the output. The explanation provider is set in `~/.barb/config.yaml` under `explain.provider`.

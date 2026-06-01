@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Fixed — detection quality (offline heuristics, branch v1.5-detection-quality)
+## [1.4.1] - 2026-06-01
+
+### Added
+- Real-corpus evaluation tooling: `eval/fetch_corpus.py` (OpenPhish + Tranco → gitignored local corpus) and a `--osint` flag on `eval/run_eval.py`.
+- "Detection quality (measured)" section in the README and `docs/MANUAL.md` — real-corpus precision/recall with the honest "high-precision URL pre-filter, not a standalone catch-all" framing.
+
+### Fixed — brand/typosquat false positives on legitimate domains
 
 Real-corpus numbers (800 URLs: 300 phishing + 500 benign, alert tier = SUSPICIOUS):
 
@@ -143,7 +149,8 @@ they do not reach the SUSPICIOUS alert tier unless combined with other signals.
 - URL defanging for TTY output. Exit codes: 0 safe/low, 1 suspicious/high, 2 phishing, 3 error.
 - CI (pytest matrix + ruff) and PyPI publishing via OIDC Trusted Publisher.
 
-[Unreleased]: https://github.com/duathron/barb/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/duathron/barb/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/duathron/barb/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/duathron/barb/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/duathron/barb/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/duathron/barb/compare/v1.1.0...v1.2.0
