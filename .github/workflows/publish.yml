@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish (PyPI + GitHub Release)
 
 on:
   push:
@@ -62,3 +62,37 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+  github-release:
+    name: Create GitHub Release
+    needs: test  # parallel to the PyPI publish; both gated on lint + tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to create the release
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Extract changelog section for this tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" {flag=1; next}
+            flag && /^## \[/ {exit}
+            flag {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release ${GITHUB_REF_NAME}" > RELEASE_NOTES.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        with:
+          name: "barb ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
