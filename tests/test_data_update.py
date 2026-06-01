@@ -285,5 +285,11 @@ class TestUpdateDataCommand:
     def test_help_lists_flags(self):
         result = runner.invoke(app, ["update-data", "--help"])
         assert result.exit_code == 0
-        assert "--top-n" in result.output
-        assert "--source" in result.output
+        # Strip ANSI color codes: Rich/Typer colorizes flag names in CI (TTY-
+        # dependent), splitting "--top-n" across escape sequences. Local
+        # CliRunner emits no color, so the raw substring passed locally but
+        # failed in CI. Normalize before asserting.
+        import re
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--top-n" in plain
+        assert "--source" in plain
