@@ -60,35 +60,61 @@ Blank lines and `#` comment lines are silently skipped.
 
 **No real malicious URLs are committed to the repository.**
 
-## Plugging in a real corpus
+## Real corpus (opt-in, local)
 
-Download a real labeled corpus into the gitignored `eval/corpus/` directory
-(that path is in `.gitignore` — it will never be committed):
+`eval/corpus/` is gitignored — nothing in that directory is ever committed.
+
+### Step 1 — build the corpus (one-time, needs network)
 
 ```sh
-mkdir -p eval/corpus
-
-# OpenPhish community feed (phishing only — combine with Tranco benign list)
-curl -o eval/corpus/openphish.txt https://openphish.com/feed.txt
-# Convert to CSV: add header + label column, then run barb eval
-
-# Tranco top-1M list (benign)
-curl -L -o eval/corpus/tranco.csv https://tranco-list.eu/download/latest/full
-
-# Once you have a combined labeled CSV:
-python -m eval.run_eval --corpus eval/corpus/real.csv
+python -m eval.fetch_corpus
+# or with options:
+python -m eval.fetch_corpus --out eval/corpus/real.csv --benign-n 500
+python -m eval.fetch_corpus --help
 ```
 
-The harness is offline-only: it never fetches the analyzed URL.  DNS/RDAP
-OSINT enrichers are explicitly disabled (`osint=False`).
+This fetches the [OpenPhish community feed](https://openphish.com/feed.txt)
+(phishing URLs) and the [Tranco top-1M list](https://tranco-list.eu/) (benign
+domains), then writes a labeled CSV to `eval/corpus/real.csv`.
+
+**Safety notes:**
+- Both downloads are HTTPS-only (HTTP is rejected before any network call).
+- The output file contains LIVE phishing URLs stored as **data strings** — do
+  not open or visit any URL from this file.
+- The file is gitignored and will never be committed to the repository.
+
+### Step 2 — run the eval (offline headline number)
+
+```sh
+python -m eval.run_eval --corpus eval/corpus/real.csv
+python -m eval.run_eval --corpus eval/corpus/real.csv --json
+```
+
+This runs barb's heuristic-only analysis — 100% offline, no OSINT.
+
+### Step 3 — run with OSINT enrichers (optional, live network, slower)
+
+```sh
+python -m eval.run_eval --corpus eval/corpus/real.csv --osint
+```
+
+Enables DNS/RDAP/crt.sh/ASN enrichers during evaluation.  Best-effort — live
+domains, slower, some lookups may fail or be rate-limited.  Useful for
+measuring the uplift from enrichers over heuristics alone.
+
+**CI always uses the synthetic fixture without `--osint`** — the default
+offline path is never changed by adding a real corpus.
 
 ## Options
 
-| Flag            | Default      | Description                                              |
-|-----------------|--------------|----------------------------------------------------------|
-| `--corpus PATH` | bundled fixture | Path to labeled CSV                                 |
-| `--alert-tier`  | `SUSPICIOUS` | Tier at/above which a URL counts as a positive prediction |
-| `--json`        | off          | Emit JSON instead of Rich table (useful for CI)          |
+| Flag                  | Default          | Description                                                     |
+|-----------------------|------------------|-----------------------------------------------------------------|
+| `--corpus PATH`       | bundled fixture  | Path to labeled CSV                                             |
+| `--alert-tier`        | `SUSPICIOUS`     | Tier at/above which a URL counts as a positive prediction       |
+| `--json`              | off              | Emit JSON instead of Rich table (useful for CI)                 |
+| `--osint`             | off              | Enable OSINT enrichers (live network, opt-in, slower)           |
+| `--min-precision F`   | none             | Fail (exit 1) if precision is below this floor                  |
+| `--min-recall F`      | none             | Fail (exit 1) if recall is below this floor                     |
 
 Alert tier choices: `SAFE`, `LOW_RISK`, `SUSPICIOUS`, `HIGH_RISK`, `PHISHING`.
 

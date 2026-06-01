@@ -1,13 +1,15 @@
 """Offline evaluation harness for barb.
 
 Measures detection quality (precision / recall / F1) against a labeled CSV corpus.
-100% offline — OSINT enrichers are never enabled.
+OSINT enrichers are disabled by default; pass ``--osint`` to enable them (opt-in,
+live network, slower).
 
 Usage:
     python -m eval.run_eval
     python -m eval.run_eval --corpus path/to/corpus.csv
     python -m eval.run_eval --json
     python -m eval.run_eval --alert-tier HIGH_RISK --json
+    python -m eval.run_eval --corpus eval/corpus/real.csv --osint
 """
 
 from __future__ import annotations
@@ -133,13 +135,17 @@ def _verdict_gte(verdict: RiskVerdict, threshold: RiskVerdict) -> bool:
 def run_eval(
     corpus_path: Optional[Path] = None,
     alert_tier: RiskVerdict = RiskVerdict.SUSPICIOUS,
+    osint: bool = False,
 ) -> EvalMetrics:
-    """Load the corpus, run barb offline, and return EvalMetrics.
+    """Load the corpus, run barb, and return EvalMetrics.
 
     Args:
         corpus_path: Path to a labeled CSV.  Defaults to the bundled fixture.
         alert_tier:  Verdict tier at-or-above which a URL counts as a
                      positive (alert) prediction.  Default: SUSPICIOUS.
+        osint:       Enable OSINT enrichers (DNS/RDAP/crt.sh/ASN).  Default
+                     False — offline, safe for CI.  Pass True only with a real
+                     corpus where live lookups are acceptable.
 
     Returns:
         Populated EvalMetrics dataclass.
@@ -159,7 +165,7 @@ def run_eval(
 
     for url, label in rows:
         try:
-            result = _analyze_single(url, config, osint=False)
+            result = _analyze_single(url, config, osint=osint)
         except ValueError:
             metrics.errors += 1
             continue
@@ -322,6 +328,17 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         metavar="FLOAT",
         help="Minimum required recall (0.0–1.0). Exits 1 if below this floor.",
     )
+    parser.add_argument(
+        "--osint",
+        dest="osint",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable OSINT enrichers (DNS/RDAP/crt.sh/ASN) during evaluation. "
+            "Opt-in only — requires live network access, slower. "
+            "Default: off (100%% offline, safe for CI)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -333,6 +350,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     metrics = run_eval(
         corpus_path=args.corpus,
         alert_tier=alert_tier,
+        osint=args.osint,
     )
 
     if args.output_json:
