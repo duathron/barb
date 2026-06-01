@@ -12,8 +12,13 @@
   Heuristic phishing URL analyzer for SOC/DFIR workflows. Offline core — no API keys, never fetches the analyzed URL. Optional <code>--osint</code> flag adds DNS, RDAP, and crt.sh CT-log enrichment.
 </p>
 
+<p align="center">
+  <img alt="PyPI" src="https://img.shields.io/pypi/v/barb-phish"> <img alt="Python" src="https://img.shields.io/pypi/pyversions/barb-phish"> <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/duathron/barb/ci.yml"> <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+</p>
 
 ---
+
+See the [full user manual](docs/MANUAL.md) for every command, flag, and output mode.
 
 ## Features
 
@@ -250,6 +255,8 @@ output:
 osint:
   dns_timeout: 2           # seconds per DNS lookup
   rdap_timeout: 5          # seconds per RDAP request
+  crtsh_timeout: 8         # seconds per crt.sh request
+  asn_timeout: 3           # seconds per ASN (Team Cymru) lookup
   cache_ttl_hours: 6       # SQLite cache TTL (~/.barb/cache.db)
 ```
 
