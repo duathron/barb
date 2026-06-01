@@ -87,6 +87,7 @@ def _run_enrichers(parsed_url, config: AppConfig, use_cache: bool = True) -> lis
     Results are cached per host (``osint.cache_ttl_hours`` TTL) to avoid repeat
     network lookups; pass ``use_cache=False`` to bypass the cache (``--no-cache``).
     """
+    from barb.enrichers.asn import ASNEnricher
     from barb.enrichers.crtsh import CrtShEnricher
     from barb.enrichers.dns import DNSEnricher
     from barb.enrichers.rdap import RDAPEnricher
@@ -105,6 +106,7 @@ def _run_enrichers(parsed_url, config: AppConfig, use_cache: bool = True) -> lis
         DNSEnricher(timeout=config.osint.dns_timeout),
         RDAPEnricher(timeout=config.osint.rdap_timeout),
         CrtShEnricher(timeout=config.osint.crtsh_timeout),
+        ASNEnricher(timeout=config.osint.asn_timeout),
     ]
     signals = []
     for enricher in enrichers:

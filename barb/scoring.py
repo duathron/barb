@@ -40,6 +40,7 @@ def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:
         "osint:dns": 1.0,
         "osint:rdap": 1.0,
         "osint:crtsh": 1.0,
+        "osint:asn": 1.0,
     }
     total = 0.0
     for signal in signals:
