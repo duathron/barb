@@ -3,7 +3,7 @@
 [← Docs index](README.md)
 
 Every command and flag below is taken verbatim from `barb <cmd> --help` on
-`barb 1.4.1`. Nothing here is invented.
+`barb 1.5.0`. Nothing here is invented.
 
 ```
 barb [OPTIONS] COMMAND [ARGS]...
@@ -13,6 +13,7 @@ barb [OPTIONS] COMMAND [ARGS]...
 |---------|---------|
 | [`analyze`](#analyze) | Analyze one or more URLs for phishing indicators. |
 | [`config`](#config) | View or modify configuration. |
+| [`manual`](#manual) | Built-in terminal usage guide. |
 | [`update-data`](#update-data) | Refresh the Tranco-based allowlist from upstream (opt-in, HTTPS only). |
 | [`version`](#version) | Show version information. |
 
@@ -262,6 +263,62 @@ barb update-data --top-n 10000
 
 ---
 
+## manual
+
+```
+barb manual [TOPIC]
+```
+
+Print a built-in terminal usage guide. When no topic is given, prints an overview with the version, GitHub and PyPI links, the available topics list, and a quick-start snippet. When a topic is given, prints that topic's guide directly.
+
+| Topic | What it covers |
+|-------|----------------|
+| `analyzers` | All 12 offline analyzers (one-line each), scoring formula, verdict thresholds, severity-floor rule |
+| `osint` | The four OSINT enrichers (DNS/RDAP/crt.sh/ASN), opt-in/fail-open behavior, cache, privacy footprint |
+| `output` | All six `-o` formats and when to use each, defang rules, exit-code reference |
+| `config` | `~/.barb/config.yaml`, priority chain, `BARB_LLM_KEY`, key fields, `~/.barb/` directory contents |
+| `pipeline` | barb → vex pipeline with real invocation examples, filtering before handoff, why pipe-only |
+| `examples` | 8+ one-line real invocations covering single/batch/stdin/threshold/osint/explain/output/update-data |
+
+If an unknown topic is supplied, barb prints a red "Unknown topic" notice and then falls through to the full overview.
+
+**Example — overview:**
+
+```bash
+barb manual
+```
+
+```
+BARB MANUAL
+
+  barb 1.5.0 — Heuristic phishing URL analyzer
+  https://github.com/duathron/barb
+  https://pypi.org/project/barb-phish/
+
+Available topics:
+  barb manual analyzers   The 12 heuristic analyzers, scoring model, thresholds
+  barb manual osint       OSINT enrichers, opt-in, fail-open, cache, privacy
+  barb manual output      Six output formats and defang rules
+  barb manual config      ~/.barb/config.yaml, priority chain, BARB_LLM_KEY
+  barb manual pipeline    barb → vex pipeline integration
+  barb manual examples    Real one-line invocations
+
+Quick start:
+  barb analyze <url>
+  barb analyze <url> --explain
+  barb analyze <url> --osint
+
+Pipeline: barb analyze <url> -o json | vex triage --from-barb
+```
+
+**Example — topic:**
+
+```bash
+barb manual pipeline
+```
+
+---
+
 ## version
 
 ```
@@ -272,7 +329,7 @@ Print the installed version and exit. No flags.
 
 ```bash
 barb version
-# barb 1.4.1
+# barb 1.5.0
 ```
 
 The top-level `barb --version` flag produces the same output.

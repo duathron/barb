@@ -12,7 +12,9 @@ answers "is this URL suspicious, and why?" using only URL structure — no API k
 no runtime downloads, no network calls to the target. Feed the JSON into **vex**
 for VirusTotal reputation enrichment, then into **sift** for alert correlation.
 
-**Installed version this manual describes: `barb 1.4.1`.**
+**Installed version this manual describes: `barb 1.5.0`.**
+
+A built-in terminal guide is available without a browser: run `barb manual` for an overview, or `barb manual <topic>` for a specific section (topics: `analyzers`, `osint`, `output`, `config`, `pipeline`, `examples`).
 
 ## Who this is for
 
@@ -25,7 +27,7 @@ for VirusTotal reputation enrichment, then into **sift** for alert correlation.
 | Page | What it covers |
 |------|----------------|
 | [Getting started](getting-started.md) | Install, first `barb analyze`, how to read the verdict/score/signals, offline-by-default vs opt-in `--osint`, exit codes at a glance. |
-| [Commands](commands.md) | Every command and every flag, taken from `--help`, with one example each. |
+| [Commands](commands.md) | Every command and every flag, taken from `--help`, with one example each. Includes `barb manual`. |
 | [Analyzers](analyzers.md) | The 12 offline analyzers, the scoring model (formula + severity points + thresholds + severity-floor), allowlist suppression, and measured detection quality. |
 | [OSINT enrichment](osint.md) | The four opt-in enrichers (DNS, RDAP, crt.sh, ASN), the cache, fail-open behavior, and the privacy footprint. |
 | [Output formats](output-formats.md) | All six output formats with a real example each. Defang rules. Threshold and exit-code interaction. |

@@ -20,6 +20,8 @@
 
 See the [full documentation](docs/README.md) for every command, flag, and output mode.
 
+Built-in guide: `barb manual` (and `barb manual analyzers` / `osint` / `pipeline` / `config` / `output` / `examples`).
+
 ## Features
 
 - **12 heuristic analyzers**: entropy, homoglyph, TLD, subdomain, brand impersonation, URL shortener, encoding abuse, IP-based URLs, typosquat, keyword, lexical, file extension

@@ -122,6 +122,20 @@ if [ $? -eq 2 ]; then
 fi
 ```
 
+## Built-in help
+
+A terminal usage guide is built into barb. No browser required.
+
+```bash
+barb manual              # overview: version, topics, quick start
+barb manual analyzers    # the 12 analyzers, scoring, thresholds
+barb manual osint        # OSINT enrichers, cache, privacy
+barb manual output       # all six output formats and defang rules
+barb manual config       # config file, priority chain, BARB_LLM_KEY
+barb manual pipeline     # barb → vex integration
+barb manual examples     # real one-line invocations
+```
+
 ## Next steps
 
 - [Commands](commands.md) — full flag reference for all subcommands.
