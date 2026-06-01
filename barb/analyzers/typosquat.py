@@ -83,7 +83,17 @@ class TyposquatAnalyzer:
         host_lower = parsed_url.host.lower()
         label = _registrable_label(host_lower)
         brands = _get_brands()
-        signals: list[Signal] = []
+
+        # Short-label guard: labels shorter than 5 chars match too many short brands
+        # spuriously (e.g. "hp", "dns", "un" all fall within Levenshtein ≤2 of "dhl",
+        # "ups", "ing").  Skip typosquat analysis for very short registrable labels.
+        if len(label) < 5:
+            return []
+
+        # Track best (lowest distance) match per host to avoid stacking multiple
+        # HIGH signals for different brands on the same label.
+        best_dist: int | None = None
+        best_detail: str | None = None
 
         for brand_name, official_domains in brands.items():
             # Skip if host is already an official domain for this brand
@@ -96,23 +106,34 @@ class TyposquatAnalyzer:
 
             # (a) Levenshtein distance 1..2
             dist = _levenshtein(label, brand_name)
+            lev_matched = False
             if 1 <= dist <= 2:
-                signals.append(Signal(
-                    analyzer=self.name,
-                    severity=SignalSeverity.HIGH,
-                    label="Possible typosquatting",
-                    detail=f"'{label}' resembles brand '{brand_name}' (distance {dist})",
-                ))
+                # For short labels (< 8 chars), distance-2 has a very high false-positive
+                # rate (e.g. "spotify"→"shopify", "webex"→"fedex", "nease"→"chase").
+                # Only accept distance-2 when the label is long enough that two edits
+                # still leave a strong fingerprint.
+                if not (dist == 2 and len(label) < 8):
+                    lev_matched = True
+                    if best_dist is None or dist < best_dist:
+                        best_dist = dist
+                        best_detail = f"'{label}' resembles brand '{brand_name}' (distance {dist})"
+
+            if lev_matched:
                 continue
 
             # (b) Equal after digit<->letter normalization AND not identical to the brand
             normalized = _normalize(label)
             if normalized == brand_name and label != brand_name:
-                signals.append(Signal(
-                    analyzer=self.name,
-                    severity=SignalSeverity.HIGH,
-                    label="Possible typosquatting",
-                    detail=f"'{label}' resembles brand '{brand_name}' (distance 1)",
-                ))
+                # Treat normalization matches as distance 1 for comparison
+                if best_dist is None or 1 < best_dist:
+                    best_dist = 1
+                    best_detail = f"'{label}' resembles brand '{brand_name}' (distance 1)"
 
-        return signals
+        if best_detail is not None:
+            return [Signal(
+                analyzer=self.name,
+                severity=SignalSeverity.HIGH,
+                label="Possible typosquatting",
+                detail=best_detail,
+            )]
+        return []

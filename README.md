@@ -226,6 +226,30 @@ Results are cached per host in `~/.barb/cache.db` (SQLite, TTL 6 h). Use `--no-c
 
 ---
 
+## Detection quality (measured)
+
+Evaluated against a labeled corpus of **800 URLs** — 300 phishing (OpenPhish feed) + 500 benign (Tranco top-500) — built with `eval/fetch_corpus.py` and scored with `eval/run_eval.py`. Alert tier: verdict ≥ SUSPICIOUS counts as a positive.
+
+| Metric | v1.4.1 (offline, snapshot 2026-06-01) |
+|--------|---------------------------------------|
+| Precision | **1.00** — zero false positives on 500 benign URLs |
+| Recall | **0.07** — 22 of 300 phishing URLs caught |
+| False-positive rate | **0.00** — 0 of 500 benign URLs flagged |
+
+> [!IMPORTANT]
+> barb is a **high-precision URL-structure pre-filter**, not a standalone catch-all. Trust a positive — when barb flags SUSPICIOUS or higher, it is reliable. Low recall is by design: barb analyzes URL structure only and never fetches the URL, so phishing on clean domains (`github.io`, `pages.dev`, plain `.com`) is an inherent limit of URL-only heuristics. That recall gap is the downstream pipeline's job: feed barb's JSON into **vex** (reputation/VirusTotal) and **sift** (correlation), and use **`--osint`** for fresh-domain signals (RDAP age, crt.sh recency) that the offline core misses.
+
+The repo also includes a **CI regression gate** using a synthetic fixture (precision 1.00 / recall 0.76). That fixture is not a field measurement — it exists to catch score-regression between releases.
+
+Reproduce the corpus numbers yourself:
+
+```bash
+python -m eval.fetch_corpus
+python -m eval.run_eval --corpus eval/corpus/real.csv
+```
+
+---
+
 ## Configuration
 
 Create `~/.barb/config.yaml`:
