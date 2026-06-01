@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Ollama explain provider (`provider: ollama`) — local-LLM analysis summaries via a local Ollama server; privacy-positive (no data leaves the host), no API key; falls back to the template explainer if Ollama is unreachable.
 - crt.sh certificate-transparency enricher (opt-in `--osint`) — flags recently issued TLS certificates (MEDIUM < 7 d, LOW < 30 d); fail-open.
 - ASN enrichment (opt-in `--osint`) — INFO context signal with the resolved IP's AS number, name and country (Team Cymru WHOIS, stdlib socket); no score impact.
 

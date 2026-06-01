@@ -216,6 +216,24 @@ def _explain(result: AnalysisResult, config: AppConfig) -> str:
         )
         return explainer.explain(result, send_url=config.explain.send_url)
 
+    elif provider == "ollama":
+        from barb.explain.llm import OllamaExplainer
+
+        explainer = OllamaExplainer(
+            host=config.explain.ollama_host,
+            model=config.explain.model or "llama3.1",
+        )
+        try:
+            return explainer.explain(result, send_url=config.explain.send_url)
+        except RuntimeError as exc:
+            typer.echo(
+                f"Note: Ollama explanation failed ({exc}); falling back to template explanation.",
+                err=True,
+            )
+            from barb.explain.template import TemplateExplainer
+
+            return TemplateExplainer().explain(result)
+
     else:
         # Template fallback (default — no API key needed)
         from barb.explain.template import TemplateExplainer

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import urllib.error
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
+from barb.config import AppConfig, ExplainConfig
 from barb.explain.template import TemplateExplainer
 from barb.models import (
     AnalysisResult,
@@ -48,3 +52,146 @@ def test_template_explainer_phishing():
     explanation = explainer.explain(result)
     assert "phishing" in explanation.lower()
     assert "IP-based URL" in explanation
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_phishing_result() -> AnalysisResult:
+    return AnalysisResult(
+        url="http://192.168.1.1/paypal",
+        defanged_url="hxxp[://]192[.]168[.]1[.]1/paypal",
+        parsed_url=ParsedURL(
+            original="http://192.168.1.1/paypal", scheme="http",
+            host="192.168.1.1", path="/paypal", is_ip=True,
+        ),
+        signals=[
+            Signal(analyzer="ip_url", severity=SignalSeverity.HIGH, label="IP-based URL", detail="Uses IP address"),
+        ],
+        risk_score=15.0,
+        verdict=RiskVerdict.PHISHING,
+        analyzed_at=datetime.now(),
+    )
+
+
+def _fake_urlopen_response(text: str):
+    """Return a mock context-manager whose .read() returns a JSON-encoded Ollama response."""
+    raw = json.dumps({"response": text}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = raw
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
+
+
+# ---------------------------------------------------------------------------
+# OllamaExplainer tests
+# ---------------------------------------------------------------------------
+
+def test_ollama_explainer_returns_response():
+    """OllamaExplainer.explain returns the 'response' field from Ollama JSON."""
+    from barb.explain.llm import OllamaExplainer
+
+    result = _make_phishing_result()
+    expected = "This URL is a phishing attempt targeting PayPal."
+
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_response(expected)) as mock_open:
+        explainer = OllamaExplainer(host="http://localhost:11434", model="llama3.1")
+        explanation = explainer.explain(result, send_url=True)
+
+    assert explanation == expected
+    mock_open.assert_called_once()
+
+
+def test_ollama_explainer_send_url_false_omits_url():
+    """When send_url=False, the URL must not appear in the POST body."""
+    from barb.explain.llm import OllamaExplainer
+
+    result = _make_phishing_result()
+
+    with patch("urllib.request.urlopen", return_value=_fake_urlopen_response("ok")) as mock_open:
+        explainer = OllamaExplainer()
+        explainer.explain(result, send_url=False)
+
+    # Retrieve the Request object passed to urlopen
+    req = mock_open.call_args[0][0]
+    posted_body = json.loads(req.data.decode())
+    # The defanged URL must not appear in the prompt
+    assert result.defanged_url not in posted_body["prompt"]
+    assert result.url not in posted_body["prompt"]
+
+
+def test_ollama_explainer_raises_on_connection_error():
+    """OllamaExplainer.explain raises RuntimeError when urlopen fails."""
+    from barb.explain.llm import OllamaExplainer
+
+    result = _make_phishing_result()
+    err = urllib.error.URLError("Connection refused")
+
+    with patch("urllib.request.urlopen", side_effect=err):
+        explainer = OllamaExplainer()
+        try:
+            explainer.explain(result)
+            assert False, "Expected RuntimeError"
+        except RuntimeError as exc:
+            assert "ollama serve" in str(exc).lower()
+
+
+def test_ollama_explainer_raises_on_bad_json():
+    """OllamaExplainer.explain raises RuntimeError when response JSON is malformed."""
+    from barb.explain.llm import OllamaExplainer
+
+    result = _make_phishing_result()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"not-json"
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        explainer = OllamaExplainer()
+        try:
+            explainer.explain(result)
+            assert False, "Expected RuntimeError"
+        except RuntimeError as exc:
+            assert "ollama serve" in str(exc).lower()
+
+
+def test_ollama_explainer_raises_on_missing_key():
+    """OllamaExplainer.explain raises RuntimeError when JSON has no 'response' key."""
+    from barb.explain.llm import OllamaExplainer
+
+    result = _make_phishing_result()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps({"something_else": "value"}).encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        explainer = OllamaExplainer()
+        try:
+            explainer.explain(result)
+            assert False, "Expected RuntimeError"
+        except RuntimeError as exc:
+            assert "ollama serve" in str(exc).lower()
+
+
+# ---------------------------------------------------------------------------
+# Dispatch fallback test: _explain() with provider="ollama" + Ollama down
+# ---------------------------------------------------------------------------
+
+def test_explain_dispatch_ollama_fallback_to_template():
+    """When provider=ollama and Ollama is unreachable, _explain returns the template explanation."""
+    from barb.main import _explain
+
+    result = _make_phishing_result()
+
+    config = AppConfig()
+    config.explain = ExplainConfig(provider="ollama", ollama_host="http://localhost:11434")
+
+    expected_template = TemplateExplainer().explain(result)
+
+    with patch("barb.explain.llm.OllamaExplainer.explain", side_effect=RuntimeError("connection refused")):
+        explanation = _explain(result, config)
+
+    assert explanation == expected_template

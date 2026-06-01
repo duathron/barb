@@ -57,6 +57,7 @@ class ExplainConfig(BaseModel):
     model: Optional[str] = None
     api_key: Optional[str] = None
     send_url: bool = True
+    ollama_host: str = "http://localhost:11434"
 
 
 class OutputConfig(BaseModel):

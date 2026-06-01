@@ -24,7 +24,7 @@
 - **Allowlist false-positive suppression**: ~71 known-good domains suppress noisy domain-based signals; path/query signals still fire
 - **OSINT result cache**: SQLite cache at `~/.barb/cache.db` (default TTL 6 h); bypass with `--no-cache`
 - **Output formats**: Rich tables, console, JSON, NDJSON, CSV, STIX 2.1
-- **`--explain` flag**: template-based explanation by default, optional LLM (Anthropic Claude, OpenAI)
+- **`--explain` flag**: template-based explanation by default, optional LLM (Anthropic Claude, OpenAI, or local Ollama)
 - **`--version` flag**: report the installed version (`barb --version` or `barb version`)
 - **Offline eval harness** (`eval/`): measures precision/recall/F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate
 - **Batch processing**: analyze URL lists from files, stdin, or multiple arguments
@@ -201,8 +201,9 @@ scoring:
     phishing: 13
 
 explain:
-  provider: "template"     # template | anthropic | openai
+  provider: "template"     # template | anthropic | openai | ollama
   send_url: true           # send defanged URL to LLM
+  # ollama_host: "http://localhost:11434"  # local Ollama server (ollama provider only)
 
 output:
   default_format: "rich"
@@ -214,7 +215,22 @@ osint:
   cache_ttl_hours: 6       # SQLite cache TTL (~/.barb/cache.db)
 ```
 
-**Environment variable:** Set `BARB_LLM_KEY` for LLM API key.
+**Environment variable:** Set `BARB_LLM_KEY` for cloud LLM API key (Anthropic / OpenAI).
+
+### Ollama (local LLM — no API key, no data leaves host)
+
+Set `provider: ollama` to use a locally running [Ollama](https://ollama.ai) server.
+No API key required; all requests go to your machine.
+
+```yaml
+explain:
+  provider: "ollama"
+  model: "llama3.1"              # any model pulled with `ollama pull <model>`
+  ollama_host: "http://localhost:11434"  # default; change for remote/custom port
+  send_url: false                # maximum privacy: omit URL from prompt
+```
+
+If Ollama is unreachable when `--explain` is used, barb automatically falls back to the template explainer and prints a note to stderr — the command always completes.
 
 ---
 
