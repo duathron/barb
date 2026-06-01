@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-01
+
+### Fixed
+
+- barb now accepts defanged IOCs on input (`hxxp[://]`, `hxxp://`, `[.]`, `(.)`, `[dot]`, `[at]`, fullwidth Unicode, zero-width) — previously rejected with "Invalid IPv6 URL"; input is refanged before parsing (offline string transform, never fetches the URL).
+
 ## [1.5.0] - 2026-06-01
 
 ### Added
@@ -155,7 +161,8 @@ they do not reach the SUSPICIOUS alert tier unless combined with other signals.
 - URL defanging for TTY output. Exit codes: 0 safe/low, 1 suspicious/high, 2 phishing, 3 error.
 - CI (pytest matrix + ruff) and PyPI publishing via OIDC Trusted Publisher.
 
-[Unreleased]: https://github.com/duathron/barb/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/duathron/barb/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/duathron/barb/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/duathron/barb/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/duathron/barb/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/duathron/barb/compare/v1.3.0...v1.4.0

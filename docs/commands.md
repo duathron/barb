@@ -3,7 +3,7 @@
 [← Docs index](README.md)
 
 Every command and flag below is taken verbatim from `barb <cmd> --help` on
-`barb 1.5.0`. Nothing here is invented.
+`barb 1.5.1`. Nothing here is invented.
 
 ```
 barb [OPTIONS] COMMAND [ARGS]...
@@ -74,6 +74,16 @@ CRITICAL     ip_url         URL contains userinfo 'paypal.com' before '@'; the
 MEDIUM       tld            TLD '.tk' is commonly associated with phishing
 LOW          keyword        Matched keywords: verify
 ```
+
+**Example — defanged IOC input (accepted directly from threat reports):**
+
+```bash
+barb analyze 'hxxp://evil[.]com/login' -q
+```
+
+barb refangs the URL automatically before analysis.  Common forms accepted:
+`hxxp`/`hxxps`/`hxtp`, `[://]`, `[.]`/`(.)`/`{.}`/`[dot]`, `[at]`/`(at)`,
+fullwidth Unicode, zero-width characters.
 
 **Example — console format:**
 

@@ -29,6 +29,19 @@ full provider list including local Ollama.
 barb analyze "http://paypal.com@evil-login.tk/verify"
 ```
 
+barb also accepts **defanged IOCs** pasted directly from threat reports —
+no manual editing required:
+
+```bash
+barb analyze 'hxxp://evil[.]com/login'
+barb analyze 'hxxps[://]micros0ft[.]tk/verify'
+```
+
+All common defang forms are recognized: `hxxp`/`hxxps`/`hxtp`, `[://]`,
+`[.]`/`(.)`/`{.}`/`[dot]`, `[at]`/`(at)`, fullwidth Unicode, and
+zero-width characters.  The URL is refanged (string transform only, offline)
+before analysis — barb never fetches the target URL.
+
 Output:
 
 ```
