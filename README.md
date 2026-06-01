@@ -97,6 +97,44 @@ barb analyze https://suspicious-site.tk/paypal-login --osint --no-cache
 cat urls.txt | barb analyze -o csv
 ```
 
+**Refresh the allowlist from Tranco (opt-in):**
+
+```bash
+barb update-data
+```
+
+---
+
+### `barb update-data` — opt-in allowlist refresh
+
+```
+barb update-data [--top-n N] [--source URL] [--quiet]
+```
+
+Downloads the [Tranco top-1M list](https://tranco-list.eu/) over HTTPS and writes
+the top `--top-n` domains (default: 5000) to `~/.barb/data/allowlist.json`.
+The bundled curated list is **never overwritten** — it is always merged in.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--top-n` | `5000` | Number of Tranco domains to include |
+| `--source` | `https://tranco-list.eu/top-1m.csv.zip` | HTTPS source URL (non-https rejected) |
+| `--quiet` | off | Suppress progress messages |
+
+**Key guarantees:**
+
+- **Opt-in only** — `barb analyze` never triggers a download. Only `barb update-data` does.
+- **Never automatic** — no background refresh, no scheduled task.
+- **HTTPS only** — non-`https://` source URLs are rejected immediately (no network call made).
+- **Bundled list is the default** — a user who never runs `update-data` sees the bundled curated list, with zero change in detection behavior.
+- **User-override location** — writes to `~/.barb/data/allowlist.json` (`0o600`, directory `0o700`), never to the package data directory.
+- **Atomic write** — temp file + `os.replace`; no partial writes visible.
+- **No new dependencies** — stdlib `urllib` only.
+
+> **Tradeoff notice:** Running `update-data` EXPANDS false-positive suppression.
+> More domains will be treated as known-good after the update, which may reduce
+> phishing signals for less-known but legitimate domains.
+
 ---
 
 ## Output Examples
