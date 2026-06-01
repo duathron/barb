@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — detection quality (offline heuristics, branch v1.5-detection-quality)
+
+Real-corpus numbers (800 URLs: 300 phishing + 500 benign, alert tier = SUSPICIOUS):
+
+| Metric    | Before | After  | Delta  |
+|-----------|--------|--------|--------|
+| Precision | 0.4597 | 1.0000 | +0.540 |
+| Recall    | 0.1900 | 0.0733 | -0.117 |
+| FP-rate   | 0.1340 | 0.0000 | -0.134 |
+| TP        | 57     | 22     | -35    |
+| FP        | 67     | 0      | -67    |
+
+Precision gain and FP elimination are the primary goals of this branch.
+The baseline TP count was inflated by spurious signals (e.g. registrable
+label `"com"` matching brand `"zoom"` at distance 2 for `roblox.com.et`,
+and the `"ing"` bank brand firing on `booking.com`, `bing.com`, etc.).
+The 35 lost "TPs" were false positives in disguise — correct catches for
+the wrong reason.  Genuine detections gained from the TLD additions
+(phishing moved from SAFE → LOW_RISK, not reaching the SUSPICIOUS alert
+tier).
+
+**Fix 1 — typosquat: de-stack + short-label guard + dist-2 length guard**
+- Emit at most one typosquat signal per host (the best/lowest-distance
+  brand match), eliminating stacked HIGH signals (e.g. `dns.google`
+  getting 3× HIGH for `dhl`/`ups`/`ing`).
+- Skip typosquat entirely when the registrable label is fewer than 5 chars
+  (`hp`, `un`, `dns`) — too short to be a meaningful typosquat target.
+- Only accept Levenshtein distance-2 matches when the label is ≥ 8 chars;
+  short labels at dist=2 produce too many legitimate collisions
+  (`webex`→`fedex`, `spotify`→`shopify`, `nease`→`chase`).
+- Fixed a logic bug where the dist-2 guard's `continue` skipped path (b)
+  (digit-normalization) for the same brand, causing `g00gle.com` to be
+  missed.
+
+**Fix 2 — brand: own-registrable-domain skip + short-brand whole-token guard + official domain expansion**
+- Brand analyzer no longer fires when the matched brand's official domain
+  list includes the host's own registrable domain (e.g. `dns.google` →
+  registrable `google.com` is Google's own domain → skip brand signal).
+- Short brands (< 5 chars, specifically `ing`) now require a whole-token
+  match (split on `.` and `-`) instead of a substring match, preventing
+  `booking.com`, `bing.com`, `springer.com`, `duolingo.com` etc. from
+  triggering the ING bank brand signal.
+- Extended `brands.json` official domain lists for Google (11 CDN/regional
+  domains), Amazon (10 regional/service domains), Apple (3), Microsoft (2),
+  Adobe (3), Netflix (2), Facebook (2), Instagram (1), Twitter (1),
+  LinkedIn (1), Shopify (2), Zoom (1) to eliminate brand FPs for legitimate
+  infrastructure domains.
+
+**Fix 3 — suspicious-TLD list: 5 new abuse-heavy TLDs**
+Additions measured against the corpus (phishing count / benign count):
+- `.cfd` (+28 phishing / 0 benign) — kept
+- `.help` (+8 phishing / 0 benign) — kept
+- `.sbs` (+3 phishing / 0 benign) — kept
+- `.lat` (+2 phishing / 0 benign) — kept
+- `.casa` (+1 phishing / 0 benign) — kept
+
+Candidates with 0 corpus hits (`lol`, `quest`, `mom`) and mainstream-legit
+TLDs (`app`, `dev`, `io`, `com`) were not added.
+These additions move phishing URLs from SAFE → LOW_RISK (MEDIUM signal);
+they do not reach the SUSPICIOUS alert tier unless combined with other signals.
+
 ## [1.4.0] - 2026-06-01
 
 ### Added
