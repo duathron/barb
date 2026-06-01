@@ -36,6 +36,11 @@ def compute_risk_score(signals: list[Signal], config: AppConfig) -> float:
         "keyword": weights.keyword,
         "lexical": weights.lexical,
         "file_ext": weights.file_ext,
+        # OSINT enrichers — low weight; severity carries the signal
+        "osint:dns": 1.0,
+        "osint:rdap": 1.0,
+        "osint:crtsh": 1.0,
+        "osint:asn": 1.0,
     }
     total = 0.0
     for signal in signals:

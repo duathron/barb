@@ -150,10 +150,16 @@ def test_run_enrichers_caches_and_skips_second_network_call(tmp_path):
     dns_instance.enrich.return_value = [_sig("dns-hit")]
     rdap_instance = MagicMock()
     rdap_instance.enrich.return_value = []
+    crtsh_instance = MagicMock()
+    crtsh_instance.enrich.return_value = []
+    asn_instance = MagicMock()
+    asn_instance.enrich.return_value = []
 
     with patch("barb.cache.get_cache", return_value=shared), \
          patch("barb.enrichers.dns.DNSEnricher", return_value=dns_instance), \
-         patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance):
+         patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance), \
+         patch("barb.enrichers.crtsh.CrtShEnricher", return_value=crtsh_instance), \
+         patch("barb.enrichers.asn.ASNEnricher", return_value=asn_instance):
         from barb.main import _run_enrichers
 
         first = _run_enrichers(parsed, config, use_cache=True)
@@ -178,10 +184,16 @@ def test_run_enrichers_no_cache_always_queries(tmp_path):
     dns_instance.enrich.return_value = [_sig("dns-hit")]
     rdap_instance = MagicMock()
     rdap_instance.enrich.return_value = []
+    crtsh_instance = MagicMock()
+    crtsh_instance.enrich.return_value = []
+    asn_instance = MagicMock()
+    asn_instance.enrich.return_value = []
 
     with patch("barb.cache.get_cache", return_value=shared), \
          patch("barb.enrichers.dns.DNSEnricher", return_value=dns_instance), \
-         patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance):
+         patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance), \
+         patch("barb.enrichers.crtsh.CrtShEnricher", return_value=crtsh_instance), \
+         patch("barb.enrichers.asn.ASNEnricher", return_value=asn_instance):
         from barb.main import _run_enrichers
 
         _run_enrichers(parsed, config, use_cache=False)

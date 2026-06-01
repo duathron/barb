@@ -132,3 +132,30 @@ def test_format_rich_suspicious_shows_all_signals():
     out = _rich_output(result)
     assert "ip_url" in out
     assert ".gz extension" in out
+
+
+def test_format_rich_safe_osint_info_shown():
+    """SAFE verdict: osint:* INFO signals must always appear (explicitly-requested enrichment)."""
+    signals = [
+        Signal(analyzer="osint:asn", severity=SignalSeverity.INFO, label="ASN", detail="AS13335 CLOUDFLARENET"),
+    ]
+    result = _make_result(verdict=RiskVerdict.SAFE, score=0.0, signals=signals)
+    out = _rich_output(result)
+    assert "osint:asn" in out
+    assert "AS13335" in out
+
+
+def test_format_rich_safe_osint_shown_nonosint_info_hidden():
+    """SAFE verdict: osint:* INFO shown; non-osint INFO hidden simultaneously."""
+    signals = [
+        Signal(analyzer="osint:asn", severity=SignalSeverity.INFO, label="ASN", detail="AS13335 CLOUDFLARENET"),
+        Signal(analyzer="file_ext", severity=SignalSeverity.INFO, label="File ext", detail=".gz extension"),
+    ]
+    result = _make_result(verdict=RiskVerdict.SAFE, score=0.0, signals=signals)
+    out = _rich_output(result)
+    assert "osint:asn" in out
+    assert "AS13335" in out
+    assert "file_ext" not in out
+    assert ".gz extension" not in out
+    # No placeholder — osint signal IS shown
+    assert "No significant signals" not in out

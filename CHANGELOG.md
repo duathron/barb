@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-01
+
+### Added
+- crt.sh certificate-transparency enricher (opt-in `--osint`) — flags recently issued TLS certificates (MEDIUM < 7 d, LOW < 30 d, INFO if no CT records); sends only the hostname; fail-open.
+- ASN enrichment (opt-in `--osint`) — INFO context signal with the resolved IP's AS number, name, country and BGP prefix (Team Cymru WHOIS, stdlib socket); analyst context only, no score impact.
+- Ollama explain provider (`provider: ollama`) — local-LLM analysis summaries via a local Ollama server; privacy-positive (no data leaves the host), no API key; falls back to the template explainer if Ollama is unreachable.
+- `update-data` command — opt-in refresh of the Tranco-based allowlist over HTTPS into a user-override file (`~/.barb/data/allowlist.json`); never automatic; bundled curated list remains the default. Supports `--top-n` (default 5000) and `--source` flags; non-https URLs rejected immediately; atomic write (`os.replace`) with `0o600` file permissions; stdlib `urllib` only; merges bundled curated entries so brand domains are never lost.
+- Full user manual at `docs/MANUAL.md`; README shields.io badges.
+
+### Changed
+- `--osint` help text now lists all four enrichers (DNS, RDAP, crt.sh, ASN).
+- Rich/console output under a SAFE verdict now shows `osint:*` enrichment signals (e.g. the ASN INFO context) since they are explicitly requested via `--osint`; non-osint INFO signals stay hidden.
+- `update-data` validates the source is HTTPS before printing any progress line.
+
 ## [1.3.0] - 2026-05-31
 
 ### Added
@@ -68,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - URL defanging for TTY output. Exit codes: 0 safe/low, 1 suspicious/high, 2 phishing, 3 error.
 - CI (pytest matrix + ruff) and PyPI publishing via OIDC Trusted Publisher.
 
-[Unreleased]: https://github.com/duathron/barb/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/duathron/barb/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/duathron/barb/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/duathron/barb/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/duathron/barb/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/duathron/barb/compare/v1.0.0...v1.1.0

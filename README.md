@@ -9,22 +9,27 @@
 </p>
 
 <p align="center">
-  Heuristic phishing URL analyzer for SOC/DFIR workflows. Offline core — no API keys, never fetches the analyzed URL. Optional <code>--osint</code> flag adds DNS/RDAP enrichment.
+  Heuristic phishing URL analyzer for SOC/DFIR workflows. Offline core — no API keys, never fetches the analyzed URL. Optional <code>--osint</code> flag adds DNS, RDAP, and crt.sh CT-log enrichment.
 </p>
 
+<p align="center">
+  <img alt="PyPI" src="https://img.shields.io/pypi/v/barb-phish"> <img alt="Python" src="https://img.shields.io/pypi/pyversions/barb-phish"> <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/duathron/barb/ci.yml"> <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+</p>
 
 ---
+
+See the [full user manual](docs/MANUAL.md) for every command, flag, and output mode.
 
 ## Features
 
 - **12 heuristic analyzers**: entropy, homoglyph, TLD, subdomain, brand impersonation, URL shortener, encoding abuse, IP-based URLs, typosquat, keyword, lexical, file extension
 - **5-tier verdict**: SAFE / LOW_RISK / SUSPICIOUS / HIGH_RISK / PHISHING with severity-floor escalation
 - **Zero API keys required** for core analysis — offline, no external calls
-- **Opt-in `--osint` enrichment**: DNS resolution + RDAP registration lookups (stdlib only, no API key); never fetches the analyzed URL
+- **Opt-in `--osint` enrichment**: DNS resolution + RDAP registration lookups + crt.sh CT-log queries + ASN lookup (stdlib only, no API key); never fetches the analyzed URL
 - **Allowlist false-positive suppression**: ~71 known-good domains suppress noisy domain-based signals; path/query signals still fire
 - **OSINT result cache**: SQLite cache at `~/.barb/cache.db` (default TTL 6 h); bypass with `--no-cache`
 - **Output formats**: Rich tables, console, JSON, NDJSON, CSV, STIX 2.1
-- **`--explain` flag**: template-based explanation by default, optional LLM (Anthropic Claude, OpenAI)
+- **`--explain` flag**: template-based explanation by default, optional LLM (Anthropic Claude, OpenAI, or local Ollama)
 - **`--version` flag**: report the installed version (`barb --version` or `barb version`)
 - **Offline eval harness** (`eval/`): measures precision/recall/F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate
 - **Batch processing**: analyze URL lists from files, stdin, or multiple arguments
@@ -96,6 +101,44 @@ barb analyze https://suspicious-site.tk/paypal-login --osint --no-cache
 ```bash
 cat urls.txt | barb analyze -o csv
 ```
+
+**Refresh the allowlist from Tranco (opt-in):**
+
+```bash
+barb update-data
+```
+
+---
+
+### `barb update-data` — opt-in allowlist refresh
+
+```
+barb update-data [--top-n N] [--source URL] [--quiet]
+```
+
+Downloads the [Tranco top-1M list](https://tranco-list.eu/) over HTTPS and writes
+the top `--top-n` domains (default: 5000) to `~/.barb/data/allowlist.json`.
+The bundled curated list is **never overwritten** — it is always merged in.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--top-n` | `5000` | Number of Tranco domains to include |
+| `--source` | `https://tranco-list.eu/top-1m.csv.zip` | HTTPS source URL (non-https rejected) |
+| `--quiet` | off | Suppress progress messages |
+
+**Key guarantees:**
+
+- **Opt-in only** — `barb analyze` never triggers a download. Only `barb update-data` does.
+- **Never automatic** — no background refresh, no scheduled task.
+- **HTTPS only** — non-`https://` source URLs are rejected immediately (no network call made).
+- **Bundled list is the default** — a user who never runs `update-data` sees the bundled curated list, with zero change in detection behavior.
+- **User-override location** — writes to `~/.barb/data/allowlist.json` (`0o600`, directory `0o700`), never to the package data directory.
+- **Atomic write** — temp file + `os.replace`; no partial writes visible.
+- **No new dependencies** — stdlib `urllib` only.
+
+> **Tradeoff notice:** Running `update-data` EXPANDS false-positive suppression.
+> More domains will be treated as known-good after the update, which may reduce
+> phishing signals for less-known but legitimate domains.
 
 ---
 
@@ -176,6 +219,8 @@ Opt-in, off by default, fail-open. Queries infrastructure metadata about the dom
 |----------|---------------|---------|
 | **DNS** | Resolves the host via `socket.getaddrinfo` (stdlib, timeout 2 s) | HIGH on loopback/sinkhole IP; MEDIUM on private IP or NXDOMAIN |
 | **RDAP** | IANA RDAP bootstrap, `urllib` (stdlib, no API key, timeout 5 s) | HIGH if domain <30 days old; MEDIUM if <90 days; LOW if registrant privacy/redacted |
+| **crt.sh** | Certificate-transparency log query via crt.sh (Sectigo), `urllib` (stdlib, no API key, timeout 8 s); sends only the hostname | MEDIUM if newest cert <7 days old; LOW if <30 days; INFO if no CT records found |
+| **ASN** | Resolves the host to an IP, then queries Team Cymru WHOIS (`whois.cymru.com`, port 43) for the hosting ASN; stdlib socket, no API key, timeout 3 s; sends only the resolved IP | INFO — AS number, name, country, and BGP prefix for analyst pivoting; **no score impact** |
 
 Results are cached per host in `~/.barb/cache.db` (SQLite, TTL 6 h). Use `--no-cache` to force fresh lookups.
 
@@ -199,8 +244,9 @@ scoring:
     phishing: 13
 
 explain:
-  provider: "template"     # template | anthropic | openai
+  provider: "template"     # template | anthropic | openai | ollama
   send_url: true           # send defanged URL to LLM
+  # ollama_host: "http://localhost:11434"  # local Ollama server (ollama provider only)
 
 output:
   default_format: "rich"
@@ -209,10 +255,27 @@ output:
 osint:
   dns_timeout: 2           # seconds per DNS lookup
   rdap_timeout: 5          # seconds per RDAP request
+  crtsh_timeout: 8         # seconds per crt.sh request
+  asn_timeout: 3           # seconds per ASN (Team Cymru) lookup
   cache_ttl_hours: 6       # SQLite cache TTL (~/.barb/cache.db)
 ```
 
-**Environment variable:** Set `BARB_LLM_KEY` for LLM API key.
+**Environment variable:** Set `BARB_LLM_KEY` for cloud LLM API key (Anthropic / OpenAI).
+
+### Ollama (local LLM — no API key, no data leaves host)
+
+Set `provider: ollama` to use a locally running [Ollama](https://ollama.ai) server.
+No API key required; all requests go to your machine.
+
+```yaml
+explain:
+  provider: "ollama"
+  model: "llama3.1"              # any model pulled with `ollama pull <model>`
+  ollama_host: "http://localhost:11434"  # default; change for remote/custom port
+  send_url: false                # maximum privacy: omit URL from prompt
+```
+
+If Ollama is unreachable when `--explain` is used, barb automatically falls back to the template explainer and prints a note to stderr — the command always completes.
 
 ---
 
@@ -272,6 +335,8 @@ The offline core makes **zero** outbound connections. When you opt into `--osint
 | DNS resolution | Your **system resolver** (`/etc/resolv.conf`: ISP/router/corporate DNS, port 53) | The domain being looked up | Same lookup any browser would do |
 | RDAP bootstrap | `https://data.iana.org/rdap/dns.json` | That you use barb/RDAP | Fetched at most once per 7 days (cached at `~/.barb/rdap_bootstrap.json`) |
 | RDAP query | The TLD's registry RDAP server (e.g. `rdap.verisign.com` for `.com`, `rdap.pir.org` for `.org`) | The domain being investigated | No API key; stdlib `urllib` only |
+| crt.sh CT query | `https://crt.sh/` (Sectigo) | The domain being investigated | Reveals domain-of-interest to Sectigo; no API key; stdlib `urllib` only |
+| ASN lookup | `whois.cymru.com` port 43 (Team Cymru) | The **resolved IP** of the domain | Sends only the IP, not the URL or hostname; stdlib socket only; no API key |
 
 - The suspect host is **never contacted** — no HTTP GET/HEAD to the URL, no DNS beacon to attacker-controlled infrastructure beyond normal name resolution.
 - No credentials are ever transmitted.

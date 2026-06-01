@@ -57,6 +57,7 @@ class ExplainConfig(BaseModel):
     model: Optional[str] = None
     api_key: Optional[str] = None
     send_url: bool = True
+    ollama_host: str = "http://localhost:11434"
 
 
 class OutputConfig(BaseModel):
@@ -79,6 +80,8 @@ class OsintConfig(BaseModel):
 
     dns_timeout: float = 2.0
     rdap_timeout: float = 5.0
+    crtsh_timeout: float = 8.0
+    asn_timeout: float = 3.0
     cache_ttl_hours: int = 6
 
 

@@ -87,6 +87,8 @@ def _run_enrichers(parsed_url, config: AppConfig, use_cache: bool = True) -> lis
     Results are cached per host (``osint.cache_ttl_hours`` TTL) to avoid repeat
     network lookups; pass ``use_cache=False`` to bypass the cache (``--no-cache``).
     """
+    from barb.enrichers.asn import ASNEnricher
+    from barb.enrichers.crtsh import CrtShEnricher
     from barb.enrichers.dns import DNSEnricher
     from barb.enrichers.rdap import RDAPEnricher
 
@@ -103,6 +105,8 @@ def _run_enrichers(parsed_url, config: AppConfig, use_cache: bool = True) -> lis
     enrichers = [
         DNSEnricher(timeout=config.osint.dns_timeout),
         RDAPEnricher(timeout=config.osint.rdap_timeout),
+        CrtShEnricher(timeout=config.osint.crtsh_timeout),
+        ASNEnricher(timeout=config.osint.asn_timeout),
     ]
     signals = []
     for enricher in enrichers:
@@ -212,6 +216,24 @@ def _explain(result: AnalysisResult, config: AppConfig) -> str:
         )
         return explainer.explain(result, send_url=config.explain.send_url)
 
+    elif provider == "ollama":
+        from barb.explain.llm import OllamaExplainer
+
+        explainer = OllamaExplainer(
+            host=config.explain.ollama_host,
+            model=config.explain.model or "llama3.1",
+        )
+        try:
+            return explainer.explain(result, send_url=config.explain.send_url)
+        except RuntimeError as exc:
+            typer.echo(
+                f"Note: Ollama explanation failed ({exc}); falling back to template explanation.",
+                err=True,
+            )
+            from barb.explain.template import TemplateExplainer
+
+            return TemplateExplainer().explain(result)
+
     else:
         # Template fallback (default — no API key needed)
         from barb.explain.template import TemplateExplainer
@@ -241,7 +263,8 @@ def analyze(
         typer.Option(
             "--osint",
             help=(
-                "Enable opt-in OSINT enrichment: DNS resolution and RDAP registration lookups about the domain. "
+                "Enable opt-in OSINT enrichment about the domain: DNS resolution, RDAP registration age, "
+                "crt.sh certificate-transparency (recent-cert age), and ASN hosting lookup. "
                 "Queries infrastructure metadata only — never fetches the analyzed URL itself."
             ),
         ),
@@ -396,6 +419,92 @@ def config(
     else:
         typer.echo("Use --show to display current configuration.")
         typer.echo("Config file: ~/.barb/config.yaml")
+
+
+@app.command(name="update-data")
+def update_data(
+    top_n: Annotated[
+        int,
+        typer.Option("--top-n", help="Number of top Tranco domains to include in the allowlist."),
+    ] = 5000,
+    source: Annotated[
+        str,
+        typer.Option(
+            "--source",
+            help=(
+                "HTTPS URL of the Tranco list to download. "
+                "Must start with https://. "
+                "Default: https://tranco-list.eu/top-1m.csv.zip"
+            ),
+        ),
+    ] = "https://tranco-list.eu/top-1m.csv.zip",
+    quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress progress messages.")] = False,
+) -> None:
+    """Refresh the Tranco-based allowlist from upstream (opt-in, HTTPS only).
+
+    Downloads the Tranco top-1M list and writes the top --top-n domains
+    to ~/.barb/data/allowlist.json (user-override location), merged with
+    the bundled curated brand list.  The bundled list is NEVER overwritten.
+
+    NOTE: This EXPANDS false-positive suppression — more domains will be
+    treated as known-good, which may reduce phishing signals for recently
+    added or obscure domains.  Run only when you understand this tradeoff.
+
+    Users who never run this command continue to use the bundled curated
+    list — default detection behavior is completely unchanged.
+    """
+    from barb.data_update import fetch_tranco, parse_tranco, write_user_allowlist
+
+    if not source.startswith("https://"):
+        typer.echo(
+            f"Error: HTTPS required — rejected non-https source URL: {source!r}. "
+            "barb only downloads data over an encrypted connection.",
+            err=True,
+        )
+        raise typer.Exit(3)
+
+    if not quiet:
+        typer.echo(
+            "NOTE: update-data EXPANDS false-positive suppression — more domains will be treated "
+            "as known-good after this update.  This is an opt-in operation."
+        )
+
+    if not quiet:
+        typer.echo(f"Fetching: {source}")
+
+    try:
+        raw = fetch_tranco(source)
+    except RuntimeError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(3)
+
+    if not quiet:
+        typer.echo(f"Parsing top {top_n} domains …")
+
+    try:
+        domains = parse_tranco(raw, top_n)
+    except Exception as exc:
+        typer.echo(f"Error parsing list: {exc}", err=True)
+        raise typer.Exit(3)
+
+    try:
+        dest = write_user_allowlist(domains)
+    except Exception as exc:
+        typer.echo(f"Error writing allowlist: {exc}", err=True)
+        raise typer.Exit(3)
+
+    # Count total entries in the written file
+    import json as _json
+
+    try:
+        total = len(_json.loads(dest.read_text()))
+    except Exception:
+        total = len(domains)
+
+    typer.echo(f"Source:   {source}")
+    typer.echo(f"Domains:  {total} written (top {top_n} Tranco + bundled curated entries)")
+    typer.echo(f"Location: {dest}")
+    typer.echo("barb analyze will now use the expanded allowlist for false-positive suppression.")
 
 
 @app.command()

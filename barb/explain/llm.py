@@ -1,6 +1,10 @@
-"""LLM-based explanation providers — Anthropic and OpenAI support."""
+"""LLM-based explanation providers — Anthropic, OpenAI, and Ollama support."""
 
 from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
 
 from ..models import AnalysisResult
 from .prompt import SYSTEM_PROMPT, build_prompt
@@ -78,3 +82,59 @@ class OpenAIExplainer:
             ],
         )
         return response.choices[0].message.content or ""
+
+
+class OllamaExplainer:
+    """Explanation provider using a local Ollama server.
+
+    Privacy-positive: all requests go to a local Ollama instance.
+    No API key required; no data leaves the host.
+    Uses stdlib urllib — no extra dependencies.
+    """
+
+    _TIMEOUT = 60  # seconds — local models can be slow
+
+    def __init__(self, host: str = "http://localhost:11434", model: str = "llama3.1") -> None:
+        self._host = host.rstrip("/")
+        self._model = model
+
+    def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
+        """Generate an explanation using the local Ollama server."""
+        signals_text = "\n".join(
+            f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals
+        )
+        defanged_url = result.defanged_url if send_url else None
+        user_prompt = build_prompt(
+            verdict=result.verdict.value,
+            risk_score=result.risk_score,
+            signals_text=signals_text,
+            defanged_url=defanged_url,
+        )
+
+        payload = json.dumps(
+            {
+                "model": self._model,
+                "system": SYSTEM_PROMPT,
+                "prompt": user_prompt,
+                "stream": False,
+            }
+        ).encode()
+
+        try:
+            req = urllib.request.Request(
+                f"{self._host}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=self._TIMEOUT) as resp:
+                body = json.loads(resp.read().decode())
+            return body["response"].strip()
+        except (urllib.error.URLError, OSError) as exc:
+            raise RuntimeError(
+                f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}"
+            ) from exc
+        except (json.JSONDecodeError, KeyError) as exc:
+            raise RuntimeError(
+                f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}"
+            ) from exc
