@@ -18,7 +18,7 @@
 
 ---
 
-See the [full user manual](docs/MANUAL.md) for every command, flag, and output mode.
+See the [full documentation](docs/README.md) for every command, flag, and output mode.
 
 ## Features
 
