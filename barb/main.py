@@ -12,7 +12,7 @@ import typer
 from barb import __version__
 from barb.banner import show_banner
 from barb.config import AppConfig, load_config
-from barb.defang import defang_url
+from barb.defang import defang_url, refang_url
 from barb.models import AnalysisResult
 from barb.scoring import compute_risk_score, determine_verdict
 from barb.url_parser import parse_url
@@ -320,6 +320,10 @@ def analyze(
             line.strip() for line in sys.stdin
             if line.strip() and not line.strip().startswith("#")
         )
+
+    # Refang defanged IOCs before validation/analysis (offline string transform,
+    # never fetches the URL).  Idempotent — live URLs are returned unchanged.
+    all_urls = [refang_url(u) for u in all_urls]
 
     if not all_urls:
         typer.echo("Error: No URLs provided. Pass URLs as arguments, via --file, or pipe to stdin.", err=True)
@@ -665,6 +669,12 @@ barb is stage 1 in a three-tool SOC/DFIR chain:
 [bold]Single URL:[/bold]
   [green]barb analyze "http://paypal.com@evil-login.tk/verify" -q[/green]
   [green]barb analyze "https://suspicious-site.tk/paypal-login" -o console -q[/green]
+
+[bold]Defanged IOC input (paste directly from threat reports):[/bold]
+  [green]barb analyze 'hxxp://evil[.]com/login' -q[/green]
+  [green]barb analyze 'hxxps[://]micros0ft[.]tk/verify' -q[/green]
+  Supported: hxxp/hxxps/hxtp, [://], [.]/(.)/\{.\}/[dot], [at]/(at), fullwidth, zero-width
+
 
 [bold]With explanation:[/bold]
   [green]barb analyze "https://pаypal.com" --explain -q[/green]

@@ -36,7 +36,7 @@ Built-in guide: `barb manual` (and `barb manual analyzers` / `osint` / `pipeline
 - **Offline eval harness** (`eval/`): measures precision/recall/F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate
 - **Batch processing**: analyze URL lists from files, stdin, or multiple arguments
 - **Automation-ready**: exit codes (0=safe, 1=suspicious, 2=phishing, 3=error), `--threshold` filtering
-- **IOC defanging**: automatic in terminal output (`hxxps[://]evil[.]com`)
+- **IOC defanging**: automatic in terminal output (`hxxps[://]evil[.]com`); accepts defanged IOCs on input (`hxxp://`, `[.]`, `[dot]`, `[at]`, fullwidth, zero-width) — refanged before analysis
 - **Configurable scoring**: per-analyzer weights and verdict thresholds via YAML
 - **Minimal dependencies**: 5 core packages (typer, rich, pydantic, pyyaml, python-dotenv)
 
@@ -72,6 +72,12 @@ pip install -e ".[dev]"
 
 ```bash
 barb analyze https://suspicious-site.tk/paypal-login
+```
+
+**Paste a defanged IOC directly from a threat report:**
+
+```bash
+barb analyze 'hxxp://evil[.]com/login'
 ```
 
 **Batch analysis from file:**

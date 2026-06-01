@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "barb-phish"
-version = "1.5.0"
+version = "1.5.1"
 description = "Heuristic phishing URL analyzer for SOC/DFIR workflows"
 readme = "README.md"
 license = "MIT"

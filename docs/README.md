@@ -12,7 +12,7 @@ answers "is this URL suspicious, and why?" using only URL structure — no API k
 no runtime downloads, no network calls to the target. Feed the JSON into **vex**
 for VirusTotal reputation enrichment, then into **sift** for alert correlation.
 
-**Installed version this manual describes: `barb 1.5.0`.**
+**Installed version this manual describes: `barb 1.5.1`.**
 
 A built-in terminal guide is available without a browser: run `barb manual` for an overview, or `barb manual <topic>` for a specific section (topics: `analyzers`, `osint`, `output`, `config`, `pipeline`, `examples`).
 
