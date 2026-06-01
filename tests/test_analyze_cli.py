@@ -136,4 +136,5 @@ def test_version_flag():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert "barb" in result.output
-    assert "1.2.0" in result.output
+    from barb import __version__
+    assert __version__ in result.output
