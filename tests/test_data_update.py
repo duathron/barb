@@ -246,6 +246,15 @@ class TestUpdateDataCommand:
         assert result.exit_code == 3
         assert "HTTPS" in result.output or "https" in result.output.lower() or "Error" in result.output
 
+    def test_http_rejection_no_fetching_line(self):
+        """When source is http://, the HTTPS error must appear BEFORE any 'Fetching:' output."""
+        result = runner.invoke(app, ["update-data", "--source", "http://insecure.example/list"])
+        assert result.exit_code == 3
+        # 'Fetching:' must NOT appear — validation fires before the print
+        assert "Fetching:" not in result.output
+        # The error message about HTTPS must be present
+        assert "HTTPS" in result.output or "Error" in result.output
+
     def test_success_with_mocked_fetch(self, tmp_path, monkeypatch):
         """Patch fetch_tranco to return a fixture zip; verify exit 0 and file written."""
         import barb.data_update as du

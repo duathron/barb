@@ -55,10 +55,14 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
     border_style = _VERDICT_STYLE.get(result.verdict, "white")
     console.print(Panel(grid, title="barb", border_style=border_style))
 
-    # Signal table — for SAFE verdict, omit INFO-severity signals
+    # Signal table — for SAFE verdict, omit INFO-severity signals from non-osint analyzers.
+    # Signals from osint:* analyzers are always shown (explicitly requested enrichment context).
     display_signals = result.signals
     if result.verdict == RiskVerdict.SAFE:
-        display_signals = [s for s in result.signals if s.severity != SignalSeverity.INFO]
+        display_signals = [
+            s for s in result.signals
+            if not (s.severity == SignalSeverity.INFO and not s.analyzer.startswith("osint:"))
+        ]
 
     if display_signals:
         sig_table = Table(box=box.SIMPLE, show_edge=False, pad_edge=False)
@@ -75,7 +79,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
             )
         console.print(sig_table)
     elif result.signals and result.verdict == RiskVerdict.SAFE:
-        # All signals were INFO — show clean placeholder
+        # All signals were non-osint INFO — show clean placeholder
         console.print("[dim]No significant signals[/dim]")
 
     # Explanation

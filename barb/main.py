@@ -263,7 +263,8 @@ def analyze(
         typer.Option(
             "--osint",
             help=(
-                "Enable opt-in OSINT enrichment: DNS resolution and RDAP registration lookups about the domain. "
+                "Enable opt-in OSINT enrichment about the domain: DNS resolution, RDAP registration age, "
+                "crt.sh certificate-transparency (recent-cert age), and ASN hosting lookup. "
                 "Queries infrastructure metadata only — never fetches the analyzed URL itself."
             ),
         ),
@@ -453,6 +454,14 @@ def update_data(
     list — default detection behavior is completely unchanged.
     """
     from barb.data_update import fetch_tranco, parse_tranco, write_user_allowlist
+
+    if not source.startswith("https://"):
+        typer.echo(
+            f"Error: HTTPS required — rejected non-https source URL: {source!r}. "
+            "barb only downloads data over an encrypted connection.",
+            err=True,
+        )
+        raise typer.Exit(3)
 
     if not quiet:
         typer.echo(
