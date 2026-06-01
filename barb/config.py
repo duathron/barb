@@ -79,6 +79,7 @@ class OsintConfig(BaseModel):
 
     dns_timeout: float = 2.0
     rdap_timeout: float = 5.0
+    crtsh_timeout: float = 8.0
     cache_ttl_hours: int = 6
 
 

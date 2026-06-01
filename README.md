@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Heuristic phishing URL analyzer for SOC/DFIR workflows. Offline core — no API keys, never fetches the analyzed URL. Optional <code>--osint</code> flag adds DNS/RDAP enrichment.
+  Heuristic phishing URL analyzer for SOC/DFIR workflows. Offline core — no API keys, never fetches the analyzed URL. Optional <code>--osint</code> flag adds DNS, RDAP, and crt.sh CT-log enrichment.
 </p>
 
 
@@ -20,7 +20,7 @@
 - **12 heuristic analyzers**: entropy, homoglyph, TLD, subdomain, brand impersonation, URL shortener, encoding abuse, IP-based URLs, typosquat, keyword, lexical, file extension
 - **5-tier verdict**: SAFE / LOW_RISK / SUSPICIOUS / HIGH_RISK / PHISHING with severity-floor escalation
 - **Zero API keys required** for core analysis — offline, no external calls
-- **Opt-in `--osint` enrichment**: DNS resolution + RDAP registration lookups (stdlib only, no API key); never fetches the analyzed URL
+- **Opt-in `--osint` enrichment**: DNS resolution + RDAP registration lookups + crt.sh CT-log queries (stdlib only, no API key); never fetches the analyzed URL
 - **Allowlist false-positive suppression**: ~71 known-good domains suppress noisy domain-based signals; path/query signals still fire
 - **OSINT result cache**: SQLite cache at `~/.barb/cache.db` (default TTL 6 h); bypass with `--no-cache`
 - **Output formats**: Rich tables, console, JSON, NDJSON, CSV, STIX 2.1
@@ -176,6 +176,7 @@ Opt-in, off by default, fail-open. Queries infrastructure metadata about the dom
 |----------|---------------|---------|
 | **DNS** | Resolves the host via `socket.getaddrinfo` (stdlib, timeout 2 s) | HIGH on loopback/sinkhole IP; MEDIUM on private IP or NXDOMAIN |
 | **RDAP** | IANA RDAP bootstrap, `urllib` (stdlib, no API key, timeout 5 s) | HIGH if domain <30 days old; MEDIUM if <90 days; LOW if registrant privacy/redacted |
+| **crt.sh** | Certificate-transparency log query via crt.sh (Sectigo), `urllib` (stdlib, no API key, timeout 8 s); sends only the hostname | MEDIUM if newest cert <7 days old; LOW if <30 days; INFO if no CT records found |
 
 Results are cached per host in `~/.barb/cache.db` (SQLite, TTL 6 h). Use `--no-cache` to force fresh lookups.
 
@@ -272,6 +273,7 @@ The offline core makes **zero** outbound connections. When you opt into `--osint
 | DNS resolution | Your **system resolver** (`/etc/resolv.conf`: ISP/router/corporate DNS, port 53) | The domain being looked up | Same lookup any browser would do |
 | RDAP bootstrap | `https://data.iana.org/rdap/dns.json` | That you use barb/RDAP | Fetched at most once per 7 days (cached at `~/.barb/rdap_bootstrap.json`) |
 | RDAP query | The TLD's registry RDAP server (e.g. `rdap.verisign.com` for `.com`, `rdap.pir.org` for `.org`) | The domain being investigated | No API key; stdlib `urllib` only |
+| crt.sh CT query | `https://crt.sh/` (Sectigo) | The domain being investigated | Reveals domain-of-interest to Sectigo; no API key; stdlib `urllib` only |
 
 - The suspect host is **never contacted** — no HTTP GET/HEAD to the URL, no DNS beacon to attacker-controlled infrastructure beyond normal name resolution.
 - No credentials are ever transmitted.

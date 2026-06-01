@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- crt.sh certificate-transparency enricher (opt-in `--osint`) — flags recently issued TLS certificates (MEDIUM < 7 d, LOW < 30 d); fail-open.
+
 ## [1.3.0] - 2026-05-31
 
 ### Added
