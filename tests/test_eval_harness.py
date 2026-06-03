@@ -95,8 +95,7 @@ def test_false_positive_rate_below_threshold():
     """
     metrics = run_eval(corpus_path=_FIXTURE)
     assert metrics.false_positive_rate < 0.5, (
-        f"FPR {metrics.false_positive_rate:.3f} exceeds 0.5 — "
-        "too many well-known benign domains are being flagged."
+        f"FPR {metrics.false_positive_rate:.3f} exceeds 0.5 — too many well-known benign domains are being flagged."
     )
 
 
@@ -145,9 +144,17 @@ def test_metrics_to_dict_has_all_keys():
     metrics = run_eval(corpus_path=_FIXTURE)
     d = metrics.to_dict()
     required = {
-        "tp", "fp", "tn", "fn", "errors",
-        "precision", "recall", "f1", "accuracy",
-        "false_positive_rate", "tier_breakdown",
+        "tp",
+        "fp",
+        "tn",
+        "fn",
+        "errors",
+        "precision",
+        "recall",
+        "f1",
+        "accuracy",
+        "false_positive_rate",
+        "tier_breakdown",
     }
     assert required.issubset(d.keys())
 
@@ -213,15 +220,14 @@ def test_run_eval_passes_osint_true(monkeypatch, tmp_path):
         calls.append({"url": url, "osint": osint})
         # Return a real-looking result by running the actual analyzer
         from barb.main import _analyze_single as real_analyze
+
         return real_analyze(url, config, explain=explain, osint=False, use_cache=False)
 
     monkeypatch.setattr(run_eval_module, "_analyze_single", fake_analyze)
     run_eval(corpus_path=corpus, osint=True)
 
     assert calls, "fake_analyze was never called"
-    assert all(c["osint"] is True for c in calls), (
-        f"Expected all calls to have osint=True, got: {calls}"
-    )
+    assert all(c["osint"] is True for c in calls), f"Expected all calls to have osint=True, got: {calls}"
 
 
 def test_run_eval_osint_default_false(monkeypatch, tmp_path):
@@ -236,15 +242,14 @@ def test_run_eval_osint_default_false(monkeypatch, tmp_path):
     def fake_analyze(url, config, explain=False, osint=False, use_cache=True):
         calls.append({"url": url, "osint": osint})
         from barb.main import _analyze_single as real_analyze
+
         return real_analyze(url, config, explain=explain, osint=False, use_cache=False)
 
     monkeypatch.setattr(run_eval_module, "_analyze_single", fake_analyze)
     run_eval(corpus_path=corpus)  # no osint= arg
 
     assert calls, "fake_analyze was never called"
-    assert all(c["osint"] is False for c in calls), (
-        f"Expected all calls to have osint=False, got: {calls}"
-    )
+    assert all(c["osint"] is False for c in calls), f"Expected all calls to have osint=False, got: {calls}"
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +290,7 @@ def test_write_corpus_deduplication(tmp_path):
     from eval.fetch_corpus import write_corpus
 
     phishing = ["https://evil.tk/", "https://evil.tk/"]  # duplicate
-    benign = ["https://good.com/", "https://good.com/"]   # duplicate
+    benign = ["https://good.com/", "https://good.com/"]  # duplicate
 
     out = tmp_path / "dedup.csv"
     write_corpus(phishing, benign, out)
@@ -362,11 +367,7 @@ def test_fetch_phishing_parses_feed(tmp_path):
     from eval.fetch_corpus import fetch_phishing
 
     feed_content = (
-        "https://evil1.tk/login\n"
-        "# this is a comment\n"
-        "\n"
-        "https://evil2.ml/verify\n"
-        "  https://evil3.cf/secure  \n"
+        "https://evil1.tk/login\n# this is a comment\n\nhttps://evil2.ml/verify\n  https://evil3.cf/secure  \n"
     )
 
     mock_resp = MagicMock()

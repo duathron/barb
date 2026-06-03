@@ -28,6 +28,7 @@ runner = CliRunner()
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_zip_csv(rows: list[str]) -> bytes:
     """Build an in-memory ZIP containing 'top.csv' from the given CSV rows."""
     buf = io.BytesIO()
@@ -45,6 +46,7 @@ def _make_tranco_zip(domains: list[str]) -> bytes:
 # ---------------------------------------------------------------------------
 # parse_tranco — zip input
 # ---------------------------------------------------------------------------
+
 
 class TestParseTrancoZip:
     def test_returns_domains_in_order(self):
@@ -84,6 +86,7 @@ class TestParseTrancoZip:
 # parse_tranco — plain CSV input
 # ---------------------------------------------------------------------------
 
+
 class TestParseTrancoPlainCsv:
     def test_plain_csv_rank_domain(self):
         csv = b"1,google.com\n2,youtube.com\n3,facebook.com\n"
@@ -105,6 +108,7 @@ class TestParseTrancoPlainCsv:
 # fetch_tranco — HTTPS enforcement (no network calls)
 # ---------------------------------------------------------------------------
 
+
 class TestFetchTrancoHttpsEnforcement:
     def test_http_url_raises_immediately(self):
         with pytest.raises(RuntimeError, match="HTTPS required"):
@@ -120,13 +124,22 @@ class TestFetchTrancoHttpsEnforcement:
 
     def test_https_url_does_not_raise_on_enforcement(self, monkeypatch):
         """Verify https:// passes the guard (we still mock the actual network)."""
+
         def fake_urlopen(url, timeout):
             class FakeResp:
-                def __enter__(self): return self
-                def __exit__(self, *a): pass
-                def read(self, n): return b""
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    pass
+
+                def read(self, n):
+                    return b""
+
             return FakeResp()
+
         import barb.data_update as du
+
         monkeypatch.setattr(du, "urlopen", fake_urlopen)
         result = fetch_tranco("https://example.com/list.zip", timeout=1.0)
         assert result == b""
@@ -136,10 +149,12 @@ class TestFetchTrancoHttpsEnforcement:
 # write_user_allowlist
 # ---------------------------------------------------------------------------
 
+
 class TestWriteUserAllowlist:
     def test_writes_json_to_user_path(self, tmp_path, monkeypatch):
         override_path = tmp_path / ".barb" / "data" / "allowlist.json"
         import barb.data_update as du
+
         monkeypatch.setattr(du, "user_allowlist_path", lambda: override_path)
         # Patch Path.home() so mkdir targets tmp_path
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -154,6 +169,7 @@ class TestWriteUserAllowlist:
     def test_includes_bundled_brand_domain(self, tmp_path, monkeypatch):
         """Merged result must include at least one bundled curated domain."""
         import barb.data_update as du
+
         override_path = tmp_path / ".barb" / "data" / "allowlist.json"
         monkeypatch.setattr(du, "user_allowlist_path", lambda: override_path)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -168,6 +184,7 @@ class TestWriteUserAllowlist:
 
     def test_file_mode_0o600(self, tmp_path, monkeypatch):
         import barb.data_update as du
+
         override_path = tmp_path / ".barb" / "data" / "allowlist.json"
         monkeypatch.setattr(du, "user_allowlist_path", lambda: override_path)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -178,6 +195,7 @@ class TestWriteUserAllowlist:
 
     def test_dir_created(self, tmp_path, monkeypatch):
         import barb.data_update as du
+
         override_path = tmp_path / ".barb" / "data" / "allowlist.json"
         monkeypatch.setattr(du, "user_allowlist_path", lambda: override_path)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -191,10 +209,12 @@ class TestWriteUserAllowlist:
 # allowlist._load_allowlist — user-override path resolution
 # ---------------------------------------------------------------------------
 
+
 class TestAllowlistUserOverride:
     def test_user_override_takes_precedence(self, tmp_path, monkeypatch):
         """A domain only in the user-override must be recognized as allowlisted."""
         import barb.allowlist as al
+
         override_path = tmp_path / "allowlist_override.json"
         override_path.write_text(json.dumps(["custom-unique-domain.com"]))
 
@@ -211,6 +231,7 @@ class TestAllowlistUserOverride:
     def test_fallback_to_bundled_when_no_override(self, tmp_path, monkeypatch):
         """When no user override exists, bundled list is used."""
         import barb.allowlist as al
+
         nonexistent = tmp_path / "nonexistent.json"
         monkeypatch.setattr(al, "_USER_OVERRIDE", nonexistent)
         al._load_allowlist.cache_clear()
@@ -223,6 +244,7 @@ class TestAllowlistUserOverride:
 
     def test_is_allowlisted_uses_override(self, tmp_path, monkeypatch):
         import barb.allowlist as al
+
         override_path = tmp_path / "allowlist_override.json"
         override_path.write_text(json.dumps(["only-in-override.com"]))
         monkeypatch.setattr(al, "_USER_OVERRIDE", override_path)
@@ -236,6 +258,7 @@ class TestAllowlistUserOverride:
 # ---------------------------------------------------------------------------
 # update-data command — smoke test (mocked network)
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateDataCommand:
     def _make_fixture_zip(self) -> bytes:
@@ -258,6 +281,7 @@ class TestUpdateDataCommand:
     def test_success_with_mocked_fetch(self, tmp_path, monkeypatch):
         """Patch fetch_tranco to return a fixture zip; verify exit 0 and file written."""
         import barb.data_update as du
+
         fixture_zip = self._make_fixture_zip()
         override_path = tmp_path / ".barb" / "data" / "allowlist.json"
 
@@ -266,9 +290,7 @@ class TestUpdateDataCommand:
 
         def mock_fetch(url, timeout=30.0):
             if not url.startswith("https://"):
-                raise RuntimeError(
-                    f"HTTPS required — rejected non-https source URL: {url!r}."
-                )
+                raise RuntimeError(f"HTTPS required — rejected non-https source URL: {url!r}.")
             calls.append(url)
             return fixture_zip
 
@@ -290,6 +312,7 @@ class TestUpdateDataCommand:
         # CliRunner emits no color, so the raw substring passed locally but
         # failed in CI. Normalize before asserting.
         import re
+
         plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
         assert "--top-n" in plain
         assert "--source" in plain

@@ -124,15 +124,14 @@ class ASNEnricher:
             if info is None:
                 return []
 
-            detail = (
-                f"IP {ip} hosted on AS{info['asn']} {info['as_name']} "
-                f"({info['cc']}), prefix {info['prefix']}"
-            )
-            return [Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.INFO,
-                label="Hosting infrastructure (ASN)",
-                detail=detail,
-            )]
+            detail = f"IP {ip} hosted on AS{info['asn']} {info['as_name']} ({info['cc']}), prefix {info['prefix']}"
+            return [
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.INFO,
+                    label="Hosting infrastructure (ASN)",
+                    detail=detail,
+                )
+            ]
         except Exception:
             return []  # Fail-open: no exception escapes enrich()

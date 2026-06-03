@@ -130,10 +130,12 @@ class TyposquatAnalyzer:
                     best_detail = f"'{label}' resembles brand '{brand_name}' (distance 1)"
 
         if best_detail is not None:
-            return [Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.HIGH,
-                label="Possible typosquatting",
-                detail=best_detail,
-            )]
+            return [
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.HIGH,
+                    label="Possible typosquatting",
+                    detail=best_detail,
+                )
+            ]
         return []

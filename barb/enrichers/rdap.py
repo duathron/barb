@@ -138,19 +138,23 @@ class RDAPEnricher:
                     reg_date = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                     age_days = (datetime.now(timezone.utc) - reg_date).days
                     if age_days < 30:
-                        signals.append(Signal(
-                            analyzer=self.name,
-                            severity=SignalSeverity.HIGH,
-                            label="Recently registered domain",
-                            detail=f"Domain registered {age_days} day(s) ago ({reg_date.date()})",
-                        ))
+                        signals.append(
+                            Signal(
+                                analyzer=self.name,
+                                severity=SignalSeverity.HIGH,
+                                label="Recently registered domain",
+                                detail=f"Domain registered {age_days} day(s) ago ({reg_date.date()})",
+                            )
+                        )
                     elif age_days < 90:
-                        signals.append(Signal(
-                            analyzer=self.name,
-                            severity=SignalSeverity.MEDIUM,
-                            label="Recently registered domain",
-                            detail=f"Domain registered {age_days} day(s) ago ({reg_date.date()})",
-                        ))
+                        signals.append(
+                            Signal(
+                                analyzer=self.name,
+                                severity=SignalSeverity.MEDIUM,
+                                label="Recently registered domain",
+                                detail=f"Domain registered {age_days} day(s) ago ({reg_date.date()})",
+                            )
+                        )
                 except (ValueError, TypeError):
                     pass
                 break  # Only care about the first registration event
@@ -172,11 +176,13 @@ class RDAPEnricher:
                     remark_notes.append(note)
         remarks_text = " ".join(remark_notes).upper()
         if "REDACTED" in remarks_text or "PRIVACY" in remarks_text or "WITHHELD" in remarks_text:
-            signals.append(Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.LOW,
-                label="WHOIS privacy enabled",
-                detail="Registrant contact information is redacted / privacy-protected",
-            ))
+            signals.append(
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.LOW,
+                    label="WHOIS privacy enabled",
+                    detail="Registrant contact information is redacted / privacy-protected",
+                )
+            )
 
         return signals

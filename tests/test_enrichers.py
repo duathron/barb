@@ -16,6 +16,7 @@ from barb.url_parser import parse_url
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _parsed(url: str):
     return parse_url(url)
 
@@ -39,6 +40,7 @@ def _mock_rdap_response(events=None, remarks=None):
 # Protocol compliance
 # ---------------------------------------------------------------------------
 
+
 def test_dns_enricher_implements_protocol():
     assert isinstance(DNSEnricher(), EnricherProtocol)
 
@@ -50,6 +52,7 @@ def test_rdap_enricher_implements_protocol():
 # ---------------------------------------------------------------------------
 # DNS enricher
 # ---------------------------------------------------------------------------
+
 
 def test_dns_skips_ip_url():
     enricher = DNSEnricher()
@@ -125,6 +128,7 @@ def test_find_server_case_insensitive():
 # ---------------------------------------------------------------------------
 # RDAP enricher
 # ---------------------------------------------------------------------------
+
 
 def test_rdap_skips_ip_url():
     enricher = RDAPEnricher()
@@ -222,12 +226,14 @@ def _mock_crtsh_response(entries: list) -> MagicMock:
 
 def _crtsh_entry(days_ago: int) -> dict:
     from datetime import datetime, timedelta, timezone
+
     dt = datetime.now(timezone.utc) - timedelta(days=days_ago)
     return {"not_before": dt.strftime("%Y-%m-%dT%H:%M:%S"), "name_value": "example.com", "id": 1}
 
 
 def test_crtsh_implements_protocol():
     from barb.enrichers.protocol import EnricherProtocol
+
     assert isinstance(CrtShEnricher(), EnricherProtocol)
 
 
@@ -327,10 +333,12 @@ _CYMRU_SAMPLE_RESPONSE = _CYMRU_VERBOSE_HEADER + _CYMRU_DATA_LINE
 
 def test_asn_implements_protocol():
     from barb.enrichers.protocol import EnricherProtocol
+
     assert isinstance(ASNEnricher(), EnricherProtocol)
 
 
 # --- _parse_cymru unit tests ---
+
 
 def test_parse_cymru_valid_response():
     """Realistic header+data line parses to correct dict."""
@@ -372,11 +380,14 @@ def test_parse_cymru_non_numeric_asn_skipped():
 
 # --- enrich() integration (patched helpers) ---
 
+
 def test_asn_enrich_returns_one_info_signal():
     """Happy path: _resolve_ip → IP, _query_cymru → response → one INFO signal."""
     enricher = ASNEnricher()
-    with patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"), \
-         patch.object(enricher, "_query_cymru", return_value=_CYMRU_SAMPLE_RESPONSE):
+    with (
+        patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"),
+        patch.object(enricher, "_query_cymru", return_value=_CYMRU_SAMPLE_RESPONSE),
+    ):
         signals = enricher.enrich(_parsed("https://example.com"))
     assert len(signals) == 1
     sig = signals[0]
@@ -390,8 +401,10 @@ def test_asn_enrich_returns_one_info_signal():
 def test_asn_enrich_ip_url_skips_resolve():
     """IP-based URL goes straight to _query_cymru, _resolve_ip is not called."""
     enricher = ASNEnricher()
-    with patch.object(enricher, "_resolve_ip") as mock_resolve, \
-         patch.object(enricher, "_query_cymru", return_value=_CYMRU_SAMPLE_RESPONSE):
+    with (
+        patch.object(enricher, "_resolve_ip") as mock_resolve,
+        patch.object(enricher, "_query_cymru", return_value=_CYMRU_SAMPLE_RESPONSE),
+    ):
         signals = enricher.enrich(_parsed("http://1.1.1.1/path"))
     mock_resolve.assert_not_called()
     assert len(signals) == 1
@@ -399,6 +412,7 @@ def test_asn_enrich_ip_url_skips_resolve():
 
 
 # --- fail-open tests ---
+
 
 def test_asn_enrich_resolve_ip_returns_none_fails_open():
     """_resolve_ip returning None → returns [], no exception."""
@@ -411,8 +425,10 @@ def test_asn_enrich_resolve_ip_returns_none_fails_open():
 def test_asn_enrich_query_cymru_returns_none_fails_open():
     """_query_cymru returning None → returns []."""
     enricher = ASNEnricher()
-    with patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"), \
-         patch.object(enricher, "_query_cymru", return_value=None):
+    with (
+        patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"),
+        patch.object(enricher, "_query_cymru", return_value=None),
+    ):
         signals = enricher.enrich(_parsed("https://example.com"))
     assert signals == []
 
@@ -420,8 +436,10 @@ def test_asn_enrich_query_cymru_returns_none_fails_open():
 def test_asn_enrich_query_cymru_raises_fails_open():
     """_query_cymru raising an exception → returns [], exception does not propagate."""
     enricher = ASNEnricher()
-    with patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"), \
-         patch.object(enricher, "_query_cymru", side_effect=RuntimeError("network error")):
+    with (
+        patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"),
+        patch.object(enricher, "_query_cymru", side_effect=RuntimeError("network error")),
+    ):
         signals = enricher.enrich(_parsed("https://example.com"))
     assert signals == []
 
@@ -429,7 +447,9 @@ def test_asn_enrich_query_cymru_raises_fails_open():
 def test_asn_enrich_parse_returns_none_fails_open():
     """_parse_cymru returning None → returns []."""
     enricher = ASNEnricher()
-    with patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"), \
-         patch.object(enricher, "_query_cymru", return_value=_CYMRU_VERBOSE_HEADER):
+    with (
+        patch.object(enricher, "_resolve_ip", return_value="1.1.1.1"),
+        patch.object(enricher, "_query_cymru", return_value=_CYMRU_VERBOSE_HEADER),
+    ):
         signals = enricher.enrich(_parsed("https://example.com"))
     assert signals == []

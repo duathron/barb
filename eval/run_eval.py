@@ -119,10 +119,7 @@ def load_corpus(corpus_path: Path) -> list[tuple[str, str]]:
             if not url or url.startswith("#"):
                 continue
             if label not in ("phishing", "benign"):
-                raise ValueError(
-                    f"Unknown label {label!r} at line {line_num}. "
-                    "Expected 'phishing' or 'benign'."
-                )
+                raise ValueError(f"Unknown label {label!r} at line {line_num}. Expected 'phishing' or 'benign'.")
             rows.append((url, label))
     return rows
 
@@ -157,11 +154,7 @@ def run_eval(
     rows = load_corpus(corpus_path)
 
     # Initialise per-tier breakdown counters
-    metrics = EvalMetrics(
-        tier_breakdown={
-            v.value: {"benign": 0, "phishing": 0} for v in _VERDICT_ORDER
-        }
-    )
+    metrics = EvalMetrics(tier_breakdown={v.value: {"benign": 0, "phishing": 0} for v in _VERDICT_ORDER})
 
     for url, label in rows:
         try:
@@ -274,13 +267,9 @@ def gate_failures(
     """
     failures: list[str] = []
     if min_precision is not None and metrics.precision < min_precision:
-        failures.append(
-            f"precision gate FAILED: actual={metrics.precision:.4f} < required={min_precision:.4f}"
-        )
+        failures.append(f"precision gate FAILED: actual={metrics.precision:.4f} < required={min_precision:.4f}")
     if min_recall is not None and metrics.recall < min_recall:
-        failures.append(
-            f"recall gate FAILED: actual={metrics.recall:.4f} < required={min_recall:.4f}"
-        )
+        failures.append(f"recall gate FAILED: actual={metrics.recall:.4f} < required={min_recall:.4f}")
     return failures
 
 
@@ -301,10 +290,7 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         dest="alert_tier",
         choices=[v.value for v in _VERDICT_ORDER],
         default=RiskVerdict.SUSPICIOUS.value,
-        help=(
-            "Verdict tier at/above which a URL counts as a positive prediction "
-            "(default: SUSPICIOUS)."
-        ),
+        help=("Verdict tier at/above which a URL counts as a positive prediction (default: SUSPICIOUS)."),
     )
     parser.add_argument(
         "--json",

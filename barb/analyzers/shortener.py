@@ -28,11 +28,13 @@ class ShortenerAnalyzer:
 
         host_lower = parsed_url.host.lower()
         if host_lower in shorteners:
-            signals.append(Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.MEDIUM,
-                label="URL shortener detected",
-                detail=f"Domain '{parsed_url.host}' is a known URL shortener",
-            ))
+            signals.append(
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.MEDIUM,
+                    label="URL shortener detected",
+                    detail=f"Domain '{parsed_url.host}' is a known URL shortener",
+                )
+            )
 
         return signals

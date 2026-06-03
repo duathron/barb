@@ -20,6 +20,7 @@ from barb.url_parser import parse_url
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _url_like() -> st.SearchStrategy[str]:
     """Strategy for URL-shaped strings (scheme + host)."""
     schemes = st.sampled_from(["http", "https", "ftp", "hxxp", "hxxps"])
@@ -43,6 +44,7 @@ def _url_like() -> st.SearchStrategy[str]:
 # ---------------------------------------------------------------------------
 # Property 1: parse_url raises ONLY ValueError (or returns ParsedURL)
 # ---------------------------------------------------------------------------
+
 
 @given(st.text())
 @settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
@@ -74,6 +76,7 @@ def test_parse_url_only_raises_valueerror_decoded_bytes(value: str) -> None:
 # Property 2: defang_url / refang_url never crash, always return str
 # ---------------------------------------------------------------------------
 
+
 @given(st.text())
 @settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
 def test_defang_url_never_crashes(value: str) -> None:
@@ -103,6 +106,7 @@ def test_defang_refang_url_like_strings(url: str) -> None:
 # ---------------------------------------------------------------------------
 # Property 3: offline analysis pipeline — no uncontrolled crash on garbage
 # ---------------------------------------------------------------------------
+
 
 @given(st.text())
 @settings(max_examples=300, suppress_health_check=[HealthCheck.too_slow])
@@ -143,6 +147,7 @@ def test_offline_pipeline_no_uncontrolled_crash_on_url_like(url: str) -> None:
 # Property 4: each analyzer's analyze() never crashes on well-formed ParsedURL
 #             (constructed with unusual-but-valid combinations)
 # ---------------------------------------------------------------------------
+
 
 def _make_parsed_url(
     host: str,
@@ -226,6 +231,7 @@ def test_all_analyzers_no_crash_on_constructed_urls(host: str, scheme: str, path
 # Regression anchors — lock behaviour on known phishing-ish inputs
 # ---------------------------------------------------------------------------
 
+
 def test_regression_punycode_host_parseable() -> None:
     """Punycode host must parse successfully and flag is_punycode=True."""
     result = parse_url("http://xn--80ak6aa92e.com")
@@ -282,9 +288,7 @@ def test_regression_known_safe_url_low_score() -> None:
     from barb.main import _analyze_single
 
     result = _analyze_single("https://example.com/", AppConfig(), explain=False, osint=False)
-    assert result.risk_score < 10, (
-        f"Expected low score for example.com; got {result.risk_score}"
-    )
+    assert result.risk_score < 10, f"Expected low score for example.com; got {result.risk_score}"
 
 
 def test_regression_at_sign_obfuscation_critical() -> None:

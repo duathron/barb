@@ -58,10 +58,10 @@ _DEFANG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\(at\)" + _AT_DOMAIN_LOOKAHEAD, re.IGNORECASE), "@"),
     (re.compile(r"\{at\}" + _AT_DOMAIN_LOOKAHEAD, re.IGNORECASE), "@"),
     # Fullwidth Unicode lookalikes
-    (re.compile("．"), "."),   # FULLWIDTH FULL STOP
-    (re.compile("＠"), "@"),   # FULLWIDTH COMMERCIAL AT
-    (re.compile("："), ":"),   # FULLWIDTH COLON
-    (re.compile("／"), "/"),   # FULLWIDTH SOLIDUS
+    (re.compile("．"), "."),  # FULLWIDTH FULL STOP
+    (re.compile("＠"), "@"),  # FULLWIDTH COMMERCIAL AT
+    (re.compile("："), ":"),  # FULLWIDTH COLON
+    (re.compile("／"), "/"),  # FULLWIDTH SOLIDUS
 ]
 
 # Zero-width / BOM characters stripped before matching.

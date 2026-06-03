@@ -29,6 +29,7 @@ def cache(tmp_path):
 # Round-trip
 # ---------------------------------------------------------------------------
 
+
 def test_set_then_get_returns_signals(cache):
     signals = [_sig("a"), _sig("b", SignalSeverity.MEDIUM)]
     cache.set("evil.com", signals)
@@ -57,6 +58,7 @@ def test_host_lookup_is_case_insensitive(cache):
 # TTL / expiry
 # ---------------------------------------------------------------------------
 
+
 def test_expired_entry_returns_none(cache):
     cache.set("evil.com", [_sig()])
     # ttl of 0 → any positive age is expired
@@ -82,6 +84,7 @@ def test_old_timestamp_expires(cache, tmp_path):
 # Overwrite / clear
 # ---------------------------------------------------------------------------
 
+
 def test_set_overwrites_existing(cache):
     cache.set("evil.com", [_sig("old")])
     cache.set("evil.com", [_sig("new")])
@@ -100,6 +103,7 @@ def test_clear_empties_cache(cache):
 # ---------------------------------------------------------------------------
 # Fail-open behavior
 # ---------------------------------------------------------------------------
+
 
 def test_corrupt_row_returns_none(cache, tmp_path):
     conn = sqlite3.connect(str(tmp_path / "cache.db"))
@@ -124,6 +128,7 @@ def test_disabled_cache_is_safe(tmp_path):
 # Security: file permissions
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
 def test_db_file_permissions_are_0600(tmp_path):
     db = tmp_path / "cache.db"
@@ -137,6 +142,7 @@ def test_db_file_permissions_are_0600(tmp_path):
 # ---------------------------------------------------------------------------
 # Integration: _run_enrichers uses the cache
 # ---------------------------------------------------------------------------
+
 
 def test_run_enrichers_caches_and_skips_second_network_call(tmp_path):
     from barb.config import AppConfig
@@ -155,11 +161,13 @@ def test_run_enrichers_caches_and_skips_second_network_call(tmp_path):
     asn_instance = MagicMock()
     asn_instance.enrich.return_value = []
 
-    with patch("barb.cache.get_cache", return_value=shared), \
-         patch("barb.enrichers.dns.DNSEnricher", return_value=dns_instance), \
-         patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance), \
-         patch("barb.enrichers.crtsh.CrtShEnricher", return_value=crtsh_instance), \
-         patch("barb.enrichers.asn.ASNEnricher", return_value=asn_instance):
+    with (
+        patch("barb.cache.get_cache", return_value=shared),
+        patch("barb.enrichers.dns.DNSEnricher", return_value=dns_instance),
+        patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance),
+        patch("barb.enrichers.crtsh.CrtShEnricher", return_value=crtsh_instance),
+        patch("barb.enrichers.asn.ASNEnricher", return_value=asn_instance),
+    ):
         from barb.main import _run_enrichers
 
         first = _run_enrichers(parsed, config, use_cache=True)
@@ -189,11 +197,13 @@ def test_run_enrichers_no_cache_always_queries(tmp_path):
     asn_instance = MagicMock()
     asn_instance.enrich.return_value = []
 
-    with patch("barb.cache.get_cache", return_value=shared), \
-         patch("barb.enrichers.dns.DNSEnricher", return_value=dns_instance), \
-         patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance), \
-         patch("barb.enrichers.crtsh.CrtShEnricher", return_value=crtsh_instance), \
-         patch("barb.enrichers.asn.ASNEnricher", return_value=asn_instance):
+    with (
+        patch("barb.cache.get_cache", return_value=shared),
+        patch("barb.enrichers.dns.DNSEnricher", return_value=dns_instance),
+        patch("barb.enrichers.rdap.RDAPEnricher", return_value=rdap_instance),
+        patch("barb.enrichers.crtsh.CrtShEnricher", return_value=crtsh_instance),
+        patch("barb.enrichers.asn.ASNEnricher", return_value=asn_instance),
+    ):
         from barb.main import _run_enrichers
 
         _run_enrichers(parsed, config, use_cache=False)

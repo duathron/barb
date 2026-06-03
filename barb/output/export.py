@@ -97,9 +97,7 @@ def to_stix(results: list[AnalysisResult]) -> str:
         display_url = result.url if len(result.url) <= 120 else result.url[:120] + "..."
         name = f"Phishing indicator: {result.verdict.value} ({display_url})"
 
-        signals_summary = "; ".join(
-            f"{s.severity.value}:{s.analyzer}:{s.label}" for s in result.signals
-        )
+        signals_summary = "; ".join(f"{s.severity.value}:{s.analyzer}:{s.label}" for s in result.signals)
         description = (
             f"Verdict: {result.verdict.value}, Risk score: {result.risk_score:.1f}. "
             f"Signals: {signals_summary if signals_summary else 'none'}"
@@ -151,9 +149,7 @@ def to_csv(results: list[AnalysisResult]) -> str:
     writer = csv.DictWriter(out, fieldnames=fields)
     writer.writeheader()
     for r in results:
-        signals_summary = "|".join(
-            f"{s.severity.value}:{s.analyzer}:{s.label}" for s in r.signals
-        )
+        signals_summary = "|".join(f"{s.severity.value}:{s.analyzer}:{s.label}" for s in r.signals)
         writer.writerow(
             {
                 "url": r.url,

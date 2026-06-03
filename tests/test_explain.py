@@ -39,8 +39,11 @@ def test_template_explainer_phishing():
         url="http://192.168.1.1/paypal",
         defanged_url="hxxp[://]192[.]168[.]1[.]1/paypal",
         parsed_url=ParsedURL(
-            original="http://192.168.1.1/paypal", scheme="http",
-            host="192.168.1.1", path="/paypal", is_ip=True,
+            original="http://192.168.1.1/paypal",
+            scheme="http",
+            host="192.168.1.1",
+            path="/paypal",
+            is_ip=True,
         ),
         signals=[
             Signal(analyzer="ip_url", severity=SignalSeverity.HIGH, label="IP-based URL", detail="Uses IP address"),
@@ -58,13 +61,17 @@ def test_template_explainer_phishing():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_phishing_result() -> AnalysisResult:
     return AnalysisResult(
         url="http://192.168.1.1/paypal",
         defanged_url="hxxp[://]192[.]168[.]1[.]1/paypal",
         parsed_url=ParsedURL(
-            original="http://192.168.1.1/paypal", scheme="http",
-            host="192.168.1.1", path="/paypal", is_ip=True,
+            original="http://192.168.1.1/paypal",
+            scheme="http",
+            host="192.168.1.1",
+            path="/paypal",
+            is_ip=True,
         ),
         signals=[
             Signal(analyzer="ip_url", severity=SignalSeverity.HIGH, label="IP-based URL", detail="Uses IP address"),
@@ -88,6 +95,7 @@ def _fake_urlopen_response(text: str):
 # ---------------------------------------------------------------------------
 # OllamaExplainer tests
 # ---------------------------------------------------------------------------
+
 
 def test_ollama_explainer_returns_response():
     """OllamaExplainer.explain returns the 'response' field from Ollama JSON."""
@@ -179,6 +187,7 @@ def test_ollama_explainer_raises_on_missing_key():
 # ---------------------------------------------------------------------------
 # Dispatch fallback test: _explain() with provider="ollama" + Ollama down
 # ---------------------------------------------------------------------------
+
 
 def test_explain_dispatch_ollama_fallback_to_template():
     """When provider=ollama and Ollama is unreachable, _explain returns the template explanation."""

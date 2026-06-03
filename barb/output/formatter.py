@@ -60,8 +60,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
     display_signals = result.signals
     if result.verdict == RiskVerdict.SAFE:
         display_signals = [
-            s for s in result.signals
-            if not (s.severity == SignalSeverity.INFO and not s.analyzer.startswith("osint:"))
+            s for s in result.signals if not (s.severity == SignalSeverity.INFO and not s.analyzer.startswith("osint:"))
         ]
 
     if display_signals:

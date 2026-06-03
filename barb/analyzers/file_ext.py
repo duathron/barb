@@ -13,14 +13,30 @@ _EXEC_EXTENSIONS: frozenset[str] = frozenset(
 
 # Document / media extensions commonly used in the masquerade trick (left of the final ext).
 _DOCUMENT_EXTENSIONS: frozenset[str] = frozenset(
-    {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf",
-     ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".mp3", ".mp4", ".avi", ".mov"}
+    {
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".txt",
+        ".rtf",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".mp3",
+        ".mp4",
+        ".avi",
+        ".mov",
+    }
 )
 
 # Archive extensions — low-severity (common in legit downloads too).
-_ARCHIVE_EXTENSIONS: frozenset[str] = frozenset(
-    {".zip", ".rar", ".7z", ".iso", ".img", ".gz", ".tar"}
-)
+_ARCHIVE_EXTENSIONS: frozenset[str] = frozenset({".zip", ".rar", ".7z", ".iso", ".img", ".gz", ".tar"})
 
 
 def _path_extensions(path: str) -> tuple[str, str]:

@@ -51,9 +51,7 @@ class OsintCache:
         """Open the SQLite connection and ensure schema + secure file permissions."""
         try:
             self._db_path.parent.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(
-                str(self._db_path), check_same_thread=False, timeout=5.0
-            )
+            self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute(_SCHEMA)
             self._conn.commit()
@@ -104,8 +102,7 @@ class OsintCache:
         try:
             with self._lock:
                 self._conn.execute(
-                    "INSERT OR REPLACE INTO osint_cache (host, signals_json, cached_at) "
-                    "VALUES (?, ?, ?)",
+                    "INSERT OR REPLACE INTO osint_cache (host, signals_json, cached_at) VALUES (?, ?, ?)",
                     (key, payload, time.time()),
                 )
                 self._conn.commit()

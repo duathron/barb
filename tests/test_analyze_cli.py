@@ -137,4 +137,5 @@ def test_version_flag():
     assert result.exit_code == 0
     assert "barb" in result.output
     from barb import __version__
+
     assert __version__ in result.output

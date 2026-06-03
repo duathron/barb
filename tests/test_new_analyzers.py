@@ -178,9 +178,7 @@ class TestTyposquatAnalyzer:
         parsed = parse_url("https://paypa1.com/login")
         signals = self.analyzer.analyze(parsed)
         typo_sigs = [s for s in signals if s.label == "Possible typosquatting"]
-        assert len(typo_sigs) == 1, (
-            f"Expected exactly 1 typosquat signal, got {len(typo_sigs)}: {typo_sigs}"
-        )
+        assert len(typo_sigs) == 1, f"Expected exactly 1 typosquat signal, got {len(typo_sigs)}: {typo_sigs}"
 
     def test_dist2_short_label_blocked(self):
         # "webex" (5 chars) at distance 2 from "fedex" must NOT fire —
@@ -629,9 +627,7 @@ class TestFileExtAnalyzer:
         from barb.models import RiskVerdict
 
         config = AppConfig()
-        result = _analyze_single(
-            "https://github.com/duathron/barb/releases/download/v1.2.0/barb.tar.gz", config
-        )
+        result = _analyze_single("https://github.com/duathron/barb/releases/download/v1.2.0/barb.tar.gz", config)
         suspicious_verdicts = {RiskVerdict.SUSPICIOUS, RiskVerdict.HIGH_RISK, RiskVerdict.PHISHING}
         assert result.verdict not in suspicious_verdicts, (
             f"Legit GitHub tarball flipped to {result.verdict} — "

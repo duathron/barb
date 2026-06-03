@@ -30,11 +30,13 @@ class TLDAnalyzer:
         if len(host_parts) == 2:
             tld = host_parts[1].lower()
             if tld in suspicious_tlds:
-                signals.append(Signal(
-                    analyzer=self.name,
-                    severity=SignalSeverity.MEDIUM,
-                    label="Suspicious TLD",
-                    detail=f"TLD '.{tld}' is commonly associated with phishing",
-                ))
+                signals.append(
+                    Signal(
+                        analyzer=self.name,
+                        severity=SignalSeverity.MEDIUM,
+                        label="Suspicious TLD",
+                        detail=f"TLD '.{tld}' is commonly associated with phishing",
+                    )
+                )
 
         return signals

@@ -96,8 +96,9 @@ class TestHomoglyphCriticalOnlyMixedScript:
         analyzer = HomoglyphAnalyzer()
         parsed = parse_url("https://пример.рф")
         signals = analyzer.analyze(parsed)
-        critical = [s for s in signals if s.severity == SignalSeverity.CRITICAL
-                    and s.label == "Homoglyph character detected"]
+        critical = [
+            s for s in signals if s.severity == SignalSeverity.CRITICAL and s.label == "Homoglyph character detected"
+        ]
         assert critical == [], f"Pure-Cyrillic IDN must not produce per-char CRITICAL; got {critical}"
 
     def test_pure_ascii_no_critical(self):
@@ -151,6 +152,7 @@ class TestAcceptanceCases:
     def test_ac1_paypal_userinfo_high_risk(self):
         """AC1: paypal.com@evil.com → HIGH_RISK (CRITICAL userinfo floor)."""
         from barb.main import _analyze_single
+
         config = AppConfig()
         result = _analyze_single("https://paypal.com@evil.com", config)
         assert result.verdict in (RiskVerdict.HIGH_RISK, RiskVerdict.PHISHING), (
@@ -160,6 +162,7 @@ class TestAcceptanceCases:
     def test_ac2_g00gle_typosquat_suspicious(self):
         """AC2: g00gle.com → SUSPICIOUS (HIGH typosquat floor)."""
         from barb.main import _analyze_single
+
         config = AppConfig()
         result = _analyze_single("https://g00gle.com", config)
         assert result.verdict in (RiskVerdict.SUSPICIOUS, RiskVerdict.HIGH_RISK, RiskVerdict.PHISHING), (
@@ -169,6 +172,7 @@ class TestAcceptanceCases:
     def test_ac3_paypal_cyrillic_a_phishing(self):
         """AC3: pаypal.com (Cyrillic 'а') → PHISHING (CRITICAL + HIGH_RISK mixed-script)."""
         from barb.main import _analyze_single
+
         config = AppConfig()
         # Cyrillic 'а' U+0430
         result = _analyze_single("https://pаypal.com/login", config)
@@ -179,6 +183,7 @@ class TestAcceptanceCases:
     def test_ac4_pure_cyrillic_idn_not_phishing(self):
         """AC4: пример.рф → NOT PHISHING; no per-char CRITICAL; has LOW IDN signal."""
         from barb.main import _analyze_single
+
         config = AppConfig()
         result = _analyze_single("https://пример.рф", config)
         # Must not be PHISHING
@@ -186,8 +191,11 @@ class TestAcceptanceCases:
             f"Expected <= SUSPICIOUS for pure Cyrillic IDN, got {result.verdict}"
         )
         # No per-char CRITICAL homoglyph
-        critical = [s for s in result.signals
-                    if s.severity == SignalSeverity.CRITICAL and s.label == "Homoglyph character detected"]
+        critical = [
+            s
+            for s in result.signals
+            if s.severity == SignalSeverity.CRITICAL and s.label == "Homoglyph character detected"
+        ]
         assert critical == [], f"Must not have per-char CRITICAL for pure-Cyrillic IDN: {critical}"
         # Has IDN LOW signal
         idn = [s for s in result.signals if s.label == "Internationalized domain (non-ASCII)"]
@@ -196,6 +204,7 @@ class TestAcceptanceCases:
     def test_ac5_evil_ru_login_safe(self):
         """AC5: https://evil.ru/login → SAFE (unchanged behaviour)."""
         from barb.main import _analyze_single
+
         config = AppConfig()
         result = _analyze_single("https://evil.ru/login", config)
         assert result.verdict in (RiskVerdict.SAFE, RiskVerdict.LOW_RISK), (
@@ -205,8 +214,7 @@ class TestAcceptanceCases:
     def test_ac6_plain_google_safe(self):
         """AC6: https://www.google.com → SAFE, no new signals."""
         from barb.main import _analyze_single
+
         config = AppConfig()
         result = _analyze_single("https://www.google.com", config)
-        assert result.verdict == RiskVerdict.SAFE, (
-            f"Expected SAFE for www.google.com, got {result.verdict}"
-        )
+        assert result.verdict == RiskVerdict.SAFE, f"Expected SAFE for www.google.com, got {result.verdict}"

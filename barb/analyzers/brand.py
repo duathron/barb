@@ -75,14 +75,15 @@ class BrandAnalyzer:
             # google's official domain list, so it IS Google's own infrastructure.
             if any(registrable == d or registrable.endswith(f".{d}") for d in official_domains):
                 continue
-            signals.append(Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.HIGH,
-                label="Brand impersonation",
-                detail=(
-                    f"Domain contains '{brand_name}' but is not an official domain"
-                    f" ({', '.join(official_domains)})"
-                ),
-            ))
+            signals.append(
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.HIGH,
+                    label="Brand impersonation",
+                    detail=(
+                        f"Domain contains '{brand_name}' but is not an official domain ({', '.join(official_domains)})"
+                    ),
+                )
+            )
 
         return signals

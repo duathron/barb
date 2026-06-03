@@ -84,21 +84,16 @@ def fetch_phishing(
                 total += len(chunk)
                 if total > _MAX_BYTES:
                     raise RuntimeError(
-                        f"Download aborted: response exceeded the "
-                        f"{_MAX_BYTES // (1024 * 1024)} MB size cap."
+                        f"Download aborted: response exceeded the {_MAX_BYTES // (1024 * 1024)} MB size cap."
                     )
                 chunks.append(chunk)
             raw = b"".join(chunks)
     except RuntimeError:
         raise
     except URLError as exc:
-        raise RuntimeError(
-            f"Network error fetching phishing feed {source_url!r}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Network error fetching phishing feed {source_url!r}: {exc}") from exc
     except Exception as exc:
-        raise RuntimeError(
-            f"Unexpected error fetching phishing feed {source_url!r}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Unexpected error fetching phishing feed {source_url!r}: {exc}") from exc
 
     text = raw.decode("utf-8", errors="replace")
     urls: list[str] = []
@@ -284,20 +279,14 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         dest="phishing_source",
         default=_DEFAULT_PHISHING_URL,
         metavar="URL",
-        help=(
-            f"HTTPS URL of the phishing feed (default: {_DEFAULT_PHISHING_URL}). "
-            "Must be https://."
-        ),
+        help=(f"HTTPS URL of the phishing feed (default: {_DEFAULT_PHISHING_URL}). Must be https://."),
     )
     parser.add_argument(
         "--tranco-source",
         dest="tranco_source",
         default=None,
         metavar="URL",
-        help=(
-            "Override the Tranco ZIP URL (default: barb.data_update default). "
-            "Must be https://."
-        ),
+        help=("Override the Tranco ZIP URL (default: barb.data_update default). Must be https://."),
     )
     parser.add_argument(
         "--timeout",

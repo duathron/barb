@@ -60,6 +60,7 @@ def _crtsh_response(data: object) -> MagicMock:
 # _find_server — bootstrap data is external (IANA-fetched / cached)
 # ---------------------------------------------------------------------------
 
+
 class TestFindServerRobustness:
     """_find_server must not raise on malformed bootstrap services entries."""
 
@@ -114,6 +115,7 @@ class TestFindServerRobustness:
 # RDAPEnricher — external RDAP JSON can be malformed
 # ---------------------------------------------------------------------------
 
+
 class TestRDAPEnricherRobustness:
     """RDAPEnricher.enrich() must return [] (or valid signals) on malformed data."""
 
@@ -122,8 +124,10 @@ class TestRDAPEnricherRobustness:
     def test_rdap_response_is_list_not_dict(self):
         """RDAP endpoint returns a JSON list instead of dict — fail-open."""
         enricher = RDAPEnricher()
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response([{"events": []}])):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response([{"events": []}])),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert signals == []
 
@@ -133,8 +137,10 @@ class TestRDAPEnricherRobustness:
         """events list contains None — previously AttributeError on None.get()."""
         enricher = RDAPEnricher()
         data = {"events": [None]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert signals == []
 
@@ -142,8 +148,10 @@ class TestRDAPEnricherRobustness:
         """events list contains a string — must skip without error."""
         enricher = RDAPEnricher()
         data = {"events": ["registration"]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert signals == []
 
@@ -151,8 +159,10 @@ class TestRDAPEnricherRobustness:
         """eventDate is an int (Unix epoch) — previously AttributeError on int.replace()."""
         enricher = RDAPEnricher()
         data = {"events": [{"eventAction": "registration", "eventDate": 1_700_000_000}]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         # int date skipped → no registration-age signal
         age_signals = [s for s in signals if "registered" in s.label.lower()]
@@ -162,8 +172,10 @@ class TestRDAPEnricherRobustness:
         """eventDate is a dict — previously AttributeError on dict.replace()."""
         enricher = RDAPEnricher()
         data = {"events": [{"eventAction": "registration", "eventDate": {"value": "2024-01-01"}}]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         age_signals = [s for s in signals if "registered" in s.label.lower()]
         assert age_signals == []
@@ -174,8 +186,10 @@ class TestRDAPEnricherRobustness:
         """remarks list contains None — previously AttributeError on None.get()."""
         enricher = RDAPEnricher()
         data = {"remarks": [None]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert signals == []
 
@@ -183,8 +197,10 @@ class TestRDAPEnricherRobustness:
         """remarks list contains an int — previously AttributeError."""
         enricher = RDAPEnricher()
         data = {"remarks": [42]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert signals == []
 
@@ -192,8 +208,10 @@ class TestRDAPEnricherRobustness:
         """description is an int (non-iterable) — previously TypeError."""
         enricher = RDAPEnricher()
         data = {"remarks": [{"description": 42}]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         # Non-list description skipped; no false privacy signal raised
         privacy_signals = [s for s in signals if "privacy" in s.label.lower()]
@@ -209,8 +227,10 @@ class TestRDAPEnricherRobustness:
         """
         enricher = RDAPEnricher()
         data = {"remarks": [{"description": "REDACTED FOR PRIVACY"}]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         privacy_signals = [s for s in signals if "privacy" in s.label.lower()]
         assert privacy_signals == []
@@ -222,8 +242,10 @@ class TestRDAPEnricherRobustness:
         enricher = RDAPEnricher()
         reg_date = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
         data = {"events": [{"eventAction": "registration", "eventDate": reg_date}]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert any(s.severity == SignalSeverity.HIGH for s in signals)
 
@@ -231,8 +253,10 @@ class TestRDAPEnricherRobustness:
         """Valid remarks list-of-strings still triggers the privacy signal (no regression)."""
         enricher = RDAPEnricher()
         data = {"remarks": [{"description": ["REDACTED FOR PRIVACY"]}]}
-        with patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP), \
-             patch("urllib.request.urlopen", return_value=_rdap_response(data)):
+        with (
+            patch("barb.enrichers.rdap._load_bootstrap", return_value=_SAMPLE_BOOTSTRAP),
+            patch("urllib.request.urlopen", return_value=_rdap_response(data)),
+        ):
             signals = enricher.enrich(_parsed("https://evil.com"))
         privacy_signals = [s for s in signals if "privacy" in s.label.lower()]
         assert len(privacy_signals) == 1
@@ -243,14 +267,14 @@ class TestRDAPEnricherRobustness:
 # CrtShEnricher — external crt.sh JSON can be malformed
 # ---------------------------------------------------------------------------
 
+
 class TestCrtShEnricherRobustness:
     """CrtShEnricher.enrich() must return [] on malformed external data."""
 
     def test_crtsh_response_is_dict_not_list(self):
         """crt.sh returns a JSON dict (e.g. rate-limit error) instead of list — fail-open."""
         enricher = CrtShEnricher()
-        with patch("urllib.request.urlopen",
-                   return_value=_crtsh_response({"error": "rate limited"})):
+        with patch("urllib.request.urlopen", return_value=_crtsh_response({"error": "rate limited"})):
             signals = enricher.enrich(_parsed("https://evil.com"))
         assert signals == []
 

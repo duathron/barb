@@ -58,15 +58,17 @@ class CrtShEnricher:
             return []
 
         if not entries:
-            return [Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.INFO,
-                label="No certificate transparency records",
-                detail=(
-                    f"No public TLS certificates found in CT logs for {host!r}. "
-                    "This may indicate a very new or non-public domain."
-                ),
-            )]
+            return [
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.INFO,
+                    label="No certificate transparency records",
+                    detail=(
+                        f"No public TLS certificates found in CT logs for {host!r}. "
+                        "This may indicate a very new or non-public domain."
+                    ),
+                )
+            ]
 
         # Find the most recently issued certificate
         now = datetime.now(timezone.utc)
@@ -95,25 +97,26 @@ class CrtShEnricher:
         age_days = (now - newest_date).days
 
         if age_days < 7:
-            return [Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.MEDIUM,
-                label="Recently issued TLS certificate",
-                detail=(
-                    f"Newest certificate issued {age_days} day(s) ago "
-                    f"({newest_date.date()}). Freshly-minted certs correlate with phishing campaigns."
-                ),
-            )]
+            return [
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.MEDIUM,
+                    label="Recently issued TLS certificate",
+                    detail=(
+                        f"Newest certificate issued {age_days} day(s) ago "
+                        f"({newest_date.date()}). Freshly-minted certs correlate with phishing campaigns."
+                    ),
+                )
+            ]
 
         if age_days < 30:
-            return [Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.LOW,
-                label="Recently issued TLS certificate",
-                detail=(
-                    f"Newest certificate issued {age_days} day(s) ago "
-                    f"({newest_date.date()})."
-                ),
-            )]
+            return [
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.LOW,
+                    label="Recently issued TLS certificate",
+                    detail=(f"Newest certificate issued {age_days} day(s) ago ({newest_date.date()})."),
+                )
+            ]
 
         return []

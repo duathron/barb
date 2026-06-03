@@ -40,6 +40,7 @@ def _app_callback(
 ) -> None:
     """Heuristic phishing URL analyzer for SOC/DFIR workflows."""
 
+
 # ---------------------------------------------------------------------------
 # Analyzer registry — lazily instantiated
 # ---------------------------------------------------------------------------
@@ -148,7 +149,8 @@ def _analyze_single(
     _SUPPRESSED_ENTROPY_LABEL = "High entropy domain"
     if is_allowlisted(parsed.host):
         signals = [
-            s for s in signals
+            s
+            for s in signals
             if not (
                 s.analyzer in _SUPPRESSED_ANALYZERS
                 or (s.analyzer == "entropy" and s.label == _SUPPRESSED_ENTROPY_LABEL)
@@ -310,16 +312,10 @@ def analyze(
             typer.echo(f"Error: File not found: {file}", err=True)
             raise typer.Exit(3)
         text = file.read_text()
-        all_urls.extend(
-            line.strip() for line in text.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        )
+        all_urls.extend(line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#"))
     if not sys.stdin.isatty() and not urls and not file:
         # Read from stdin
-        all_urls.extend(
-            line.strip() for line in sys.stdin
-            if line.strip() and not line.strip().startswith("#")
-        )
+        all_urls.extend(line.strip() for line in sys.stdin if line.strip() and not line.strip().startswith("#"))
 
     # Refang defanged IOCs before validation/analysis (offline string transform,
     # never fetches the URL).  Idempotent — live URLs are returned unchanged.
@@ -545,7 +541,6 @@ barb is a high-precision URL pre-filter (precision 1.00 on the real corpus).
 Low recall is by design: URL structure only, no fetching. Close the recall gap
 with [bold]--osint[/bold] and the [bold]vex[/bold] pipeline.
 """,
-
     "osint": r"""\
 [bold cyan]OSINT ENRICHMENT — opt-in infrastructure checks[/bold cyan]
 
@@ -573,7 +568,6 @@ fetches the analyzed URL itself — only infrastructure metadata about it.
   - Only infrastructure metadata is queried (DNS, registration age, crt.sh CT, IP ASN)
   - OSINT signals appear in output alongside offline signals
 """,
-
     "output": r"""\
 [bold cyan]OUTPUT FORMATS — six shapes for every workflow[/bold cyan]
 
@@ -599,7 +593,6 @@ Select with [bold]-o[/bold] / [bold]--output[/bold].
   --threshold INT  filter: only URLs with risk_score >= N appear in output
   Exit 0 = SAFE/LOW_RISK  |  1 = SUSPICIOUS/HIGH_RISK  |  2 = PHISHING  |  3 = error
 """,
-
     "config": r"""\
 [bold cyan]CONFIGURATION REFERENCE[/bold cyan]
 
@@ -631,7 +624,6 @@ Priority chain (first match wins):
   data/allowlist.json     User-override Tranco allowlist (written by update-data)
   rdap_bootstrap.json     IANA RDAP bootstrap cache (auto-managed, 7-day refresh)
 """,
-
     "pipeline": r"""\
 [bold cyan]PIPELINE — barb → vex → sift[/bold cyan]
 
@@ -662,7 +654,6 @@ barb is stage 1 in a three-tool SOC/DFIR chain:
 
 [dim]barb analyze <url> -o json | vex triage --from-barb[/dim]
 """,
-
     "examples": r"""\
 [bold cyan]USAGE EXAMPLES[/bold cyan]
 

@@ -18,17 +18,14 @@ class AnthropicExplainer:
             import anthropic
         except ImportError:
             raise ImportError(
-                "anthropic package required for Anthropic LLM explanations. "
-                "Install with: pip install barb-phish[llm]"
+                "anthropic package required for Anthropic LLM explanations. Install with: pip install barb-phish[llm]"
             )
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
 
     def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
         """Generate an explanation using Anthropic Claude."""
-        signals_text = "\n".join(
-            f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals
-        )
+        signals_text = "\n".join(f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals)
         defanged_url = result.defanged_url if send_url else None
         user_prompt = build_prompt(
             verdict=result.verdict.value,
@@ -54,17 +51,14 @@ class OpenAIExplainer:
             import openai
         except ImportError:
             raise ImportError(
-                "openai package required for OpenAI LLM explanations. "
-                "Install with: pip install barb-phish[llm]"
+                "openai package required for OpenAI LLM explanations. Install with: pip install barb-phish[llm]"
             )
         self._client = openai.OpenAI(api_key=api_key)
         self._model = model
 
     def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
         """Generate an explanation using OpenAI."""
-        signals_text = "\n".join(
-            f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals
-        )
+        signals_text = "\n".join(f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals)
         defanged_url = result.defanged_url if send_url else None
         user_prompt = build_prompt(
             verdict=result.verdict.value,
@@ -100,9 +94,7 @@ class OllamaExplainer:
 
     def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
         """Generate an explanation using the local Ollama server."""
-        signals_text = "\n".join(
-            f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals
-        )
+        signals_text = "\n".join(f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals)
         defanged_url = result.defanged_url if send_url else None
         user_prompt = build_prompt(
             verdict=result.verdict.value,
@@ -131,10 +123,6 @@ class OllamaExplainer:
                 body = json.loads(resp.read().decode())
             return body["response"].strip()
         except (urllib.error.URLError, OSError) as exc:
-            raise RuntimeError(
-                f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}"
-            ) from exc
+            raise RuntimeError(f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}") from exc
         except (json.JSONDecodeError, KeyError) as exc:
-            raise RuntimeError(
-                f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}"
-            ) from exc
+            raise RuntimeError(f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}") from exc

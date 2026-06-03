@@ -18,13 +18,15 @@ import socket
 from barb.models import ParsedURL, Signal, SignalSeverity
 
 # Known sinkhole addresses (small curated list)
-_SINKHOLE_IPS: frozenset[str] = frozenset({
-    "0.0.0.0",
-    "74.208.246.4",    # SecureWorks sinkhole
-    "204.11.56.48",    # CAIDA
-    "199.127.232.105", # SURBL
-    "52.8.228.23",     # ISC SANS
-})
+_SINKHOLE_IPS: frozenset[str] = frozenset(
+    {
+        "0.0.0.0",
+        "74.208.246.4",  # SecureWorks sinkhole
+        "204.11.56.48",  # CAIDA
+        "199.127.232.105",  # SURBL
+        "52.8.228.23",  # ISC SANS
+    }
+)
 
 
 class DNSEnricher:
@@ -56,26 +58,32 @@ class DNSEnricher:
                 except ValueError:
                     continue
                 if addr.is_loopback or ip_str in _SINKHOLE_IPS:
-                    signals.append(Signal(
-                        analyzer=self.name,
-                        severity=SignalSeverity.HIGH,
-                        label="Sinkhole or loopback IP",
-                        detail=f"Domain resolves to suspicious address: {ip_str}",
-                    ))
+                    signals.append(
+                        Signal(
+                            analyzer=self.name,
+                            severity=SignalSeverity.HIGH,
+                            label="Sinkhole or loopback IP",
+                            detail=f"Domain resolves to suspicious address: {ip_str}",
+                        )
+                    )
                 elif addr.is_private:
-                    signals.append(Signal(
-                        analyzer=self.name,
-                        severity=SignalSeverity.MEDIUM,
-                        label="Private IP address",
-                        detail=f"Domain resolves to private address: {ip_str}",
-                    ))
+                    signals.append(
+                        Signal(
+                            analyzer=self.name,
+                            severity=SignalSeverity.MEDIUM,
+                            label="Private IP address",
+                            detail=f"Domain resolves to private address: {ip_str}",
+                        )
+                    )
         except socket.gaierror:
-            signals.append(Signal(
-                analyzer=self.name,
-                severity=SignalSeverity.MEDIUM,
-                label="DNS does not resolve",
-                detail=f"Domain {host!r} does not resolve (NXDOMAIN or DNS error)",
-            ))
+            signals.append(
+                Signal(
+                    analyzer=self.name,
+                    severity=SignalSeverity.MEDIUM,
+                    label="DNS does not resolve",
+                    detail=f"Domain {host!r} does not resolve (NXDOMAIN or DNS error)",
+                )
+            )
         except OSError:
             pass  # Unexpected OS error — fail-open
         finally:

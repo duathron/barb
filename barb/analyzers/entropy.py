@@ -21,23 +21,27 @@ class EntropyAnalyzer:
         host_entropy = self._shannon_entropy(parsed_url.host)
         if host_entropy > 4.0:
             severity = SignalSeverity.HIGH if host_entropy > 4.5 else SignalSeverity.MEDIUM
-            signals.append(Signal(
-                analyzer=self.name,
-                severity=severity,
-                label="High entropy domain",
-                detail=f"Domain '{parsed_url.host}' has Shannon entropy {host_entropy:.2f}",
-            ))
+            signals.append(
+                Signal(
+                    analyzer=self.name,
+                    severity=severity,
+                    label="High entropy domain",
+                    detail=f"Domain '{parsed_url.host}' has Shannon entropy {host_entropy:.2f}",
+                )
+            )
 
         path = parsed_url.path.strip("/")
         if path and len(path) > 10:
             path_entropy = self._shannon_entropy(path)
             if path_entropy > 4.5:
-                signals.append(Signal(
-                    analyzer=self.name,
-                    severity=SignalSeverity.LOW,
-                    label="High entropy path",
-                    detail=f"Path has Shannon entropy {path_entropy:.2f}",
-                ))
+                signals.append(
+                    Signal(
+                        analyzer=self.name,
+                        severity=SignalSeverity.LOW,
+                        label="High entropy path",
+                        detail=f"Path has Shannon entropy {path_entropy:.2f}",
+                    )
+                )
 
         return signals
 

@@ -158,10 +158,7 @@ def write_user_allowlist(domains: list[str]) -> Path:
 
     # Merge: bundled curated entries are never lost
     bundled = _load_bundled_domains()
-    merged: list[str] = list(dict.fromkeys(
-        [d.lower().strip() for d in bundled]
-        + [d.lower().strip() for d in domains]
-    ))
+    merged: list[str] = list(dict.fromkeys([d.lower().strip() for d in bundled] + [d.lower().strip() for d in domains]))
 
     payload = json.dumps(merged, indent=2, ensure_ascii=False)
 

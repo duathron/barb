@@ -80,6 +80,7 @@ def _rich_output(result: AnalysisResult, defang: bool = True) -> str:
     buf = StringIO()
     cap_console = Console(file=buf, highlight=False)
     import barb.output.formatter as _fmt
+
     orig = _fmt.console
     _fmt.console = cap_console
     try:
