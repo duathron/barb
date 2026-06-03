@@ -66,11 +66,17 @@ def _find_server(tld: str, bootstrap: dict) -> Optional[str]:
     """Return the RDAP base URL for the given TLD, or None if unknown."""
     tld_lower = tld.lower()
     for entry in bootstrap.get("services", []):
-        if len(entry) < 2:
+        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
             continue
         tlds, servers = entry[0], entry[1]
-        if tld_lower in (t.lower() for t in tlds) and servers:
-            return servers[0].rstrip("/") + "/"
+        # Guard: tlds and servers must be iterable collections
+        if not isinstance(tlds, (list, tuple)) or not isinstance(servers, (list, tuple)):
+            continue
+        if tld_lower in (t.lower() for t in tlds if isinstance(t, str)) and servers:
+            server = servers[0]
+            if not isinstance(server, str):
+                continue
+            return server.rstrip("/") + "/"
     return None
 
 
@@ -110,13 +116,25 @@ class RDAPEnricher:
         except Exception:
             return []  # Network or parse error — fail-open
 
+        # Guard: RDAP response must be a dict; a non-dict (e.g. list) would cause
+        # AttributeError on .get() — fail-open.
+        if not isinstance(data, dict):
+            return []
+
         signals: list[Signal] = []
 
         # --- Registration date -----------------------------------------------
         for event in data.get("events", []):
+            # Guard: each event must be a dict; skip malformed entries
+            if not isinstance(event, dict):
+                continue
             if event.get("eventAction") == "registration":
                 raw_date = event.get("eventDate", "")
                 try:
+                    # Guard: raw_date must be a str; a non-str (e.g. int epoch) would
+                    # cause AttributeError on .replace() — skip gracefully.
+                    if not isinstance(raw_date, str):
+                        raise TypeError("eventDate is not a string")
                     reg_date = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                     age_days = (datetime.now(timezone.utc) - reg_date).days
                     if age_days < 30:
@@ -138,11 +156,21 @@ class RDAPEnricher:
                 break  # Only care about the first registration event
 
         # --- Privacy protection ----------------------------------------------
-        remarks_text = " ".join(
-            note
-            for remark in data.get("remarks", [])
-            for note in remark.get("description", [])
-        ).upper()
+        # Guard: each remark must be a dict with a list-of-strings description;
+        # non-dict remarks and non-list/non-str descriptions are skipped to avoid
+        # AttributeError (None.get), TypeError (int not iterable), and
+        # wrong-behavior (str description iterates as characters).
+        remark_notes: list[str] = []
+        for remark in data.get("remarks", []):
+            if not isinstance(remark, dict):
+                continue
+            description = remark.get("description", [])
+            if not isinstance(description, list):
+                continue
+            for note in description:
+                if isinstance(note, str):
+                    remark_notes.append(note)
+        remarks_text = " ".join(remark_notes).upper()
         if "REDACTED" in remarks_text or "PRIVACY" in remarks_text or "WITHHELD" in remarks_text:
             signals.append(Signal(
                 analyzer=self.name,

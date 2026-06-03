@@ -52,6 +52,11 @@ class CrtShEnricher:
         except Exception:
             return []  # Network or parse error — fail-open
 
+        # Guard: crt.sh must return a list; a non-list (e.g. error dict) would cause
+        # AttributeError when iterating and calling .get() on string keys.
+        if not isinstance(entries, list):
+            return []
+
         if not entries:
             return [Signal(
                 analyzer=self.name,
@@ -68,6 +73,9 @@ class CrtShEnricher:
         newest_date: datetime | None = None
 
         for entry in entries:
+            # Guard: each entry must be a dict; skip non-dict entries (e.g. None)
+            if not isinstance(entry, dict):
+                continue
             raw = entry.get("not_before", "")
             if not raw:
                 continue
