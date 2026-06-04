@@ -467,3 +467,12 @@ def test_build_benign_uses_default_tranco_url():
         build_benign(top_n=1)
 
     assert captured == [_DEFAULT_TRANCO_URL]
+
+
+def test_metrics_match_4dp_via_library():
+    """EvalMetrics delegates the metric math to shipwright.eval (DRY), still 4-dp rounded."""
+    m = EvalMetrics(tp=7, fp=0, tn=10, fn=3, errors=1)
+    assert m.precision == 1.0
+    assert m.recall == 0.7  # 7 / 10
+    assert m.false_positive_rate == 0.0
+    assert m.f1 == round(2 * 1.0 * 0.7 / 1.7, 4)

@@ -15,20 +15,33 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# ---------------------------------------------------------------------------
-# Verdict ordering (mirrors barb/scoring.py _VERDICT_ORDER)
-# ---------------------------------------------------------------------------
+from shipwright.design.tiers import Severity
+from shipwright.eval.corpus import load_corpus as _sw_load_corpus
+from shipwright.eval.harness import evaluate as _sw_evaluate
+from shipwright.eval.metrics import EvalResult as _SwEvalResult
+from shipwright.security.eval import is_alert as _sw_is_alert
+
 from barb.config import load_config
 from barb.main import _analyze_single
 from barb.models import RiskVerdict
 
+# RiskVerdict → generic Severity (order-preserving; reproduces barb's positive set
+# {SUSPICIOUS,HIGH_RISK,PHISHING} = Severity >= NOTICE under is_alert).
+_VERDICT_TO_SEV: dict[RiskVerdict, Severity] = {
+    RiskVerdict.SAFE: Severity.OK,
+    RiskVerdict.LOW_RISK: Severity.INFO,
+    RiskVerdict.SUSPICIOUS: Severity.NOTICE,
+    RiskVerdict.HIGH_RISK: Severity.WARN,
+    RiskVerdict.PHISHING: Severity.CRITICAL,
+}
+
+# Verdict ordering (mirrors barb/scoring.py _VERDICT_ORDER) — used for tier-display order.
 _VERDICT_ORDER: list[RiskVerdict] = [
     RiskVerdict.SAFE,
     RiskVerdict.LOW_RISK,
@@ -57,31 +70,30 @@ class EvalMetrics:
     # Per-tier breakdown: tier_name -> {"benign": int, "phishing": int}
     tier_breakdown: dict[str, dict[str, int]] = field(default_factory=dict)
 
+    def _sw(self) -> "_SwEvalResult":
+        # Delegate the metric math to shipwright.eval (DRY). barb keeps its own
+        # 4-dp rounding for display; the library returns raw floats.
+        return _SwEvalResult(tp=self.tp, fp=self.fp, tn=self.tn, fn=self.fn, errors=self.errors)
+
     @property
     def precision(self) -> float:
-        denom = self.tp + self.fp
-        return round(self.tp / denom, 4) if denom else 0.0
+        return round(self._sw().precision, 4)
 
     @property
     def recall(self) -> float:
-        denom = self.tp + self.fn
-        return round(self.tp / denom, 4) if denom else 0.0
+        return round(self._sw().recall, 4)
 
     @property
     def f1(self) -> float:
-        p, r = self.precision, self.recall
-        denom = p + r
-        return round(2 * p * r / denom, 4) if denom else 0.0
+        return round(self._sw().f1, 4)
 
     @property
     def accuracy(self) -> float:
-        total = self.tp + self.fp + self.tn + self.fn
-        return round((self.tp + self.tn) / total, 4) if total else 0.0
+        return round(self._sw().accuracy, 4)
 
     @property
     def false_positive_rate(self) -> float:
-        denom = self.fp + self.tn
-        return round(self.fp / denom, 4) if denom else 0.0
+        return round(self._sw().false_positive_rate, 4)
 
     def to_dict(self) -> dict:
         return {
@@ -105,28 +117,18 @@ class EvalMetrics:
 
 
 def load_corpus(corpus_path: Path) -> list[tuple[str, str]]:
-    """Load (url, label) pairs from a CSV file.
+    """Load (url, label) pairs via shipwright.eval; keep barb's strict label validation.
 
-    Skips blank lines and lines beginning with '#'.
-    Label is normalised to lowercase.  Raises ValueError on unknown labels.
+    The library handles CSV parsing (comment/blank tolerant, ``input_col`` override);
+    barb still rejects any label outside {phishing, benign} to preserve its strictness.
     """
     rows: list[tuple[str, str]] = []
-    with open(corpus_path, newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        for line_num, row in enumerate(reader, start=2):  # +2: 1-indexed + header
-            url = (row.get("url") or "").strip()
-            label = (row.get("label") or "").strip().lower()
-            if not url or url.startswith("#"):
-                continue
-            if label not in ("phishing", "benign"):
-                raise ValueError(f"Unknown label {label!r} at line {line_num}. Expected 'phishing' or 'benign'.")
-            rows.append((url, label))
+    for sample in _sw_load_corpus(corpus_path, input_col="url"):
+        label = sample.label.strip().lower()
+        if label not in ("phishing", "benign"):
+            raise ValueError(f"Unknown label {label!r}. Expected 'phishing' or 'benign'.")
+        rows.append((sample.input, label))
     return rows
-
-
-def _verdict_gte(verdict: RiskVerdict, threshold: RiskVerdict) -> bool:
-    """Return True when verdict is at or above the threshold tier."""
-    return _VERDICT_ORDER.index(verdict) >= _VERDICT_ORDER.index(threshold)
 
 
 def run_eval(
@@ -135,6 +137,11 @@ def run_eval(
     osint: bool = False,
 ) -> EvalMetrics:
     """Load the corpus, run barb, and return EvalMetrics.
+
+    The confusion tally + metrics are delegated to ``shipwright.eval`` (DRY); barb's
+    per-tier breakdown is built from the cached verdicts (so ``analyze`` runs once
+    per URL).  Binarization uses the library's ``is_alert`` over the RiskVerdict→Severity
+    adapter, which reproduces barb's original ``verdict >= alert_tier`` rule.
 
     Args:
         corpus_path: Path to a labeled CSV.  Defaults to the bundled fixture.
@@ -147,39 +154,45 @@ def run_eval(
     Returns:
         Populated EvalMetrics dataclass.
     """
+    from shipwright.eval.corpus import Sample
+
     if corpus_path is None:
         corpus_path = _DEFAULT_CORPUS
 
     config = load_config()
     rows = load_corpus(corpus_path)
+    corpus = [Sample(url, label) for url, label in rows]
 
-    # Initialise per-tier breakdown counters
-    metrics = EvalMetrics(tier_breakdown={v.value: {"benign": 0, "phishing": 0} for v in _VERDICT_ORDER})
+    # cache: url -> verdict (single analyze). Keyed by URL → assumes unique URLs
+    # in the corpus (true for the committed fixture). A corpus with duplicate URLs
+    # would diverge from strict per-row counting — revisit then.
+    verdicts: dict[str, RiskVerdict] = {}
 
+    def _predict(url: str) -> str:
+        verdict = _analyze_single(url, config, osint=osint).verdict  # may raise ValueError
+        verdicts[url] = verdict
+        return verdict.value
+
+    alert_sev = _VERDICT_TO_SEV[alert_tier]
+    result = _sw_evaluate(
+        _predict,
+        corpus,
+        positive_pred=lambda v: _sw_is_alert(_VERDICT_TO_SEV[RiskVerdict(v)], alert_at=alert_sev),
+        positive_expected=lambda label: label == "phishing",
+    )
+
+    metrics = EvalMetrics(
+        tp=result.tp,
+        fp=result.fp,
+        tn=result.tn,
+        fn=result.fn,
+        errors=result.errors,
+        tier_breakdown={v.value: {"benign": 0, "phishing": 0} for v in _VERDICT_ORDER},
+    )
+    # Per-tier breakdown from the cache; error rows are absent → skipped (as before).
     for url, label in rows:
-        try:
-            result = _analyze_single(url, config, osint=osint)
-        except ValueError:
-            metrics.errors += 1
-            continue
-
-        verdict = result.verdict
-        predicted_positive = _verdict_gte(verdict, alert_tier)
-        ground_truth_positive = label == "phishing"
-
-        # Update per-tier breakdown
-        metrics.tier_breakdown[verdict.value][label] += 1
-
-        # Update confusion matrix
-        if predicted_positive and ground_truth_positive:
-            metrics.tp += 1
-        elif predicted_positive and not ground_truth_positive:
-            metrics.fp += 1
-        elif not predicted_positive and ground_truth_positive:
-            metrics.fn += 1
-        else:
-            metrics.tn += 1
-
+        if url in verdicts:
+            metrics.tier_breakdown[verdicts[url].value][label] += 1
     return metrics
 
 
@@ -229,7 +242,7 @@ def _print_rich(metrics: EvalMetrics, alert_tier: RiskVerdict) -> None:
         tier_name = verdict.value
         b = metrics.tier_breakdown[tier_name]["benign"]
         p = metrics.tier_breakdown[tier_name]["phishing"]
-        marker = " *" if _verdict_gte(verdict, alert_tier) else ""
+        marker = " *" if _sw_is_alert(_VERDICT_TO_SEV[verdict], alert_at=_VERDICT_TO_SEV[alert_tier]) else ""
         breakdown.add_row(f"{tier_name}{marker}", str(b), str(p), str(b + p))
 
     console.print(breakdown)
