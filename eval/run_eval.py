@@ -21,11 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from shipwright.design.tiers import Severity
-from shipwright.eval.corpus import load_corpus as _sw_load_corpus
-from shipwright.eval.harness import evaluate as _sw_evaluate
-from shipwright.eval.metrics import EvalResult as _SwEvalResult
-from shipwright.security.eval import is_alert as _sw_is_alert
+from shipwright_kit.design.tiers import Severity
+from shipwright_kit.eval.corpus import load_corpus as _sw_load_corpus
+from shipwright_kit.eval.harness import evaluate as _sw_evaluate
+from shipwright_kit.eval.metrics import EvalResult as _SwEvalResult
+from shipwright_kit.security.eval import is_alert as _sw_is_alert
 
 from barb.config import load_config
 from barb.main import _analyze_single
@@ -71,7 +71,7 @@ class EvalMetrics:
     tier_breakdown: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def _sw(self) -> "_SwEvalResult":
-        # Delegate the metric math to shipwright.eval (DRY). barb keeps its own
+        # Delegate the metric math to shipwright_kit.eval (DRY). barb keeps its own
         # 4-dp rounding for display; the library returns raw floats.
         return _SwEvalResult(tp=self.tp, fp=self.fp, tn=self.tn, fn=self.fn, errors=self.errors)
 
@@ -117,7 +117,7 @@ class EvalMetrics:
 
 
 def load_corpus(corpus_path: Path) -> list[tuple[str, str]]:
-    """Load (url, label) pairs via shipwright.eval; keep barb's strict label validation.
+    """Load (url, label) pairs via shipwright_kit.eval; keep barb's strict label validation.
 
     The library handles CSV parsing (comment/blank tolerant, ``input_col`` override);
     barb still rejects any label outside {phishing, benign} to preserve its strictness.
@@ -138,7 +138,7 @@ def run_eval(
 ) -> EvalMetrics:
     """Load the corpus, run barb, and return EvalMetrics.
 
-    The confusion tally + metrics are delegated to ``shipwright.eval`` (DRY); barb's
+    The confusion tally + metrics are delegated to ``shipwright_kit.eval`` (DRY); barb's
     per-tier breakdown is built from the cached verdicts (so ``analyze`` runs once
     per URL).  Binarization uses the library's ``is_alert`` over the RiskVerdict→Severity
     adapter, which reproduces barb's original ``verdict >= alert_tier`` rule.
@@ -154,7 +154,7 @@ def run_eval(
     Returns:
         Populated EvalMetrics dataclass.
     """
-    from shipwright.eval.corpus import Sample
+    from shipwright_kit.eval.corpus import Sample
 
     if corpus_path is None:
         corpus_path = _DEFAULT_CORPUS
