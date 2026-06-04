@@ -24,3 +24,14 @@ jobs:
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
       - run: uv sync --dev
       - run: uv run python -m eval.run_eval --min-precision 1.0 --min-recall 0.70
+
+  # G5: enforce "no release without a dogfood pass" in the pipeline (offline tier).
+  # Keyless heuristics core; live OSINT tier stays opt-in/keyed (out of free CI).
+  dogfood:
+    name: Dogfood gate (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+      - run: uv sync --dev
+      - run: uv run bash dogfood.sh   # BARB_DOGFOOD_OSINT unset → live skipped, exit 0
