@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from shipwright_kit.design.tiers import Severity
+from shipwright_kit.eval import EVAL_SCHEMA_VERSION
 from shipwright_kit.eval.corpus import load_corpus as _sw_load_corpus
 from shipwright_kit.eval.harness import evaluate as _sw_evaluate
 from shipwright_kit.eval.metrics import EvalResult as _SwEvalResult
@@ -97,6 +98,7 @@ class EvalMetrics:
 
     def to_dict(self) -> dict:
         return {
+            "schema_version": EVAL_SCHEMA_VERSION,
             "tp": self.tp,
             "fp": self.fp,
             "tn": self.tn,

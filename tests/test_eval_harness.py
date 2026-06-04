@@ -476,3 +476,11 @@ def test_metrics_match_4dp_via_library():
     assert m.recall == 0.7  # 7 / 10
     assert m.false_positive_rate == 0.0
     assert m.f1 == round(2 * 1.0 * 0.7 / 1.7, 4)
+
+
+def test_eval_schema_version_pinned():
+    # barb's eval --json carries shipwright_kit's EVAL_SCHEMA_VERSION. A library bump
+    # must fail barb CI so the consumption is reviewed + the pin updated (G10/N6).
+    from shipwright_kit.eval import EVAL_SCHEMA_VERSION
+
+    assert EVAL_SCHEMA_VERSION == 1
