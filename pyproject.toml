@@ -35,7 +35,12 @@ dependencies = [
 llm = ["anthropic>=0.30.0", "openai>=1.30.0"]
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "ruff>=0.4.0", "hypothesis>=6.0"]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+    "hypothesis>=6.0",
+    "shipwright @ git+https://github.com/duathron/shipwright@v0.1.1",
+]
 
 [project.scripts]
 barb = "barb.main:main"
