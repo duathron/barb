@@ -1,6 +1,11 @@
 # barb — Project Documentation
 
-*Recorded by Project Documentation Agent — 2026-03-17*
+*Recorded by Project Documentation Agent — 2026-03-17, maintained through v1.6.0 (2026-06-05)*
+
+> This document covers barb's full history: the original design phase (the
+> records below under "The Idea" and "Design Decisions" are the v1.0 MeetUp
+> design history and are kept verbatim) and the shipped releases v1.0.0 →
+> v1.6.0. For the authoritative per-release change list, see `CHANGELOG.md`.
 
 ---
 
@@ -30,64 +35,117 @@
 | Batch Processing | ThreadPoolExecutor + Rich progress bar | `vex/batch.py` |
 | URL Defanging | Copied from vex (no cross-project dependency) | `vex/defang.py` |
 
-### Module Structure
+### Module Structure (current — v1.6.0)
+
+This is the real package as shipped, not the original v1.0 plan. barb grew from
+8 to **12 offline analyzers** (the `typosquat`, `keyword`, `lexical` analyzers
+arrived in v1.2.0; `file_ext` in v1.3.0), gained an `enrichers/` package for
+opt-in OSINT (DNS, RDAP, crt.sh, ASN), an Ollama explain provider, a top-level
+`eval/` detection-quality harness (a dev tool, not shipped in the wheel), and
+the shared-library integration via `shipwright_kit`.
 
 ```
 barb/
 ├── __init__.py           # __version__, __author__, __repo__
 ├── __main__.py           # python -m barb
-├── main.py               # Typer CLI: analyze, config, version
-├── banner.py             # ASCII art banner (fishhook, b&w)
-├── config.py             # Pydantic v2 config with priority hierarchy
+├── main.py               # Typer CLI: analyze, config, version, manual, update-data
+├── banner.py             # figlet-style banner (black & white)
+├── config.py             # AppConfig (Pydantic v2); delegates resolve→load→validate
+│                         #   skeleton + secure app-dir to shipwright_kit.config
 ├── models.py             # AnalysisResult, Signal, RiskVerdict, ParsedURL
 ├── url_parser.py         # URL decomposition via urllib.parse
-├── scoring.py            # Weighted signal aggregation → RiskVerdict
-├── defang.py             # URL defanging/refanging (copied from vex)
-├── batch.py              # Parallel batch processing
+├── scoring.py            # Weighted signal aggregation + severity-floor → RiskVerdict
+├── defang.py             # URL defang / refang (offline string transform)
+├── allowlist.py          # Tranco allowlist suppression for domain-based signals
+├── cache.py              # SQLite OSINT result cache (~/.barb/cache.db, TTL)
+├── batch.py              # Parallel batch processing (ThreadPoolExecutor)
+├── data_update.py        # `update-data` — opt-in HTTPS allowlist refresh
 ├── version_check.py      # GitHub release check
-├── analyzers/
+├── analyzers/            # 12 offline heuristics (no network)
 │   ├── protocol.py       # AnalyzerProtocol (typing.Protocol)
 │   ├── base.py           # Shared analyzer helpers
 │   ├── entropy.py        # Shannon entropy of domain/path
-│   ├── homoglyph.py      # Unicode confusable detection
+│   ├── homoglyph.py      # Unicode confusable + mixed-script detection
 │   ├── tld.py            # Suspicious TLD check
 │   ├── subdomain.py      # Subdomain depth & squatting patterns
 │   ├── brand.py          # Brand impersonation detection
 │   ├── shortener.py      # Known URL shortener detection
 │   ├── encoding.py       # Percent-encoding / punycode abuse
-│   └── ip_url.py         # IP-based URL detection
+│   ├── ip_url.py         # IP-based URL + @-obfuscation detection
+│   ├── typosquat.py      # ASCII lookalikes (Levenshtein 1–2, digit↔letter)
+│   ├── keyword.py        # Phishing keywords in path/query (aggregated LOW)
+│   ├── lexical.py        # URL length / hyphen count / host digit ratio
+│   └── file_ext.py       # Suspicious file extensions in the URL path
+├── enrichers/            # opt-in OSINT (--osint); network, fail-open, never fetches URL
+│   ├── protocol.py       # EnricherProtocol
+│   ├── dns.py            # DNS resolution (stdlib socket): sinkhole/loopback/NXDOMAIN
+│   ├── rdap.py           # RDAP domain registration age (IANA bootstrap, stdlib urllib)
+│   ├── crtsh.py          # crt.sh certificate-transparency recency
+│   └── asn.py            # ASN context (Team Cymru WHOIS) — INFO only, no score impact
 ├── data/
 │   ├── homoglyphs.json   # Unicode confusable character mapping
-│   ├── brands.json       # Top brand domains for impersonation check
+│   ├── brands.json       # Brand domains + official-domain allow-lists
 │   ├── shorteners.json   # Known URL shortener services
-│   └── suspicious_tlds.json  # High-risk TLDs
+│   ├── suspicious_tlds.json  # High-risk TLDs
+│   └── allowlist.json    # Curated Tranco allowlist (FP suppression baseline)
 ├── explain/
 │   ├── protocol.py       # ExplainerProtocol
 │   ├── template.py       # Template-based fallback (no LLM)
-│   ├── llm.py            # Anthropic + OpenAI integration
+│   ├── llm.py            # Anthropic + OpenAI + Ollama providers
 │   └── prompt.py         # Prompt templates for LLM
 └── output/
     ├── formatter.py      # Rich + console output
-    └── export.py         # JSON + CSV export
+    └── export.py         # JSON, NDJSON, CSV, STIX 2.1 export
+
+eval/                     # dev-only detection-quality harness (not in the wheel)
+├── run_eval.py           # precision/recall/F1 vs a labeled CSV; CI regression gate
+│                         #   delegates corpus/binarization/metrics to shipwright_kit.eval
+├── fetch_corpus.py       # build a real corpus (OpenPhish + Tranco → gitignored)
+├── fixtures/             # committed synthetic sample corpus
+└── corpus/               # local real corpus (gitignored)
 ```
 
 ### Config Priority Hierarchy
 
 1. CLI flags (`--threshold`, `--output`, `--config`)
-2. Environment variables (`BARB_LLM_KEY`)
+2. Environment variables (`BARB_LLM_KEY` → overrides `explain.api_key`)
 3. User config (`~/.barb/config.yaml`)
 4. Package defaults (Pydantic model defaults)
 
+barb keeps its own `AppConfig` Pydantic schema (scoring weights/thresholds,
+explain, output, update-check, OSINT timeouts) and its `BARB_LLM_KEY` override,
+but as of v1.6.0 the **resolve → load → validate** skeleton and the secure
+app-directory creation (`~/.barb`, 0o700) are delegated to
+`shipwright_kit.config` so the boilerplate is shared across the Shipwright
+tools rather than copied.
+
+### Dependencies
+
+Core runtime (always installed): `typer`, `rich`, `pydantic`, `pyyaml`,
+`python-dotenv`, and — since v1.6.0 — **`shipwright-kit>=0.6.0,<0.7.0`** (the
+shared Shipwright library, resolved from PyPI; imported at runtime by
+`barb/config.py` and by the eval harness). Cloud LLM providers are an optional
+extra: `pip install barb-phish[llm]` adds `anthropic` and `openai`. Dev tooling
+(`pytest`, `ruff`, `hypothesis`) lives in a PEP-735 `[dependency-groups] dev`
+group, installed with `uv sync --dev`.
+
 ### Security Model
 
-1. **No HTTP requests** to analyzed URLs — pure string heuristics
+1. **Never-fetch wall:** barb never issues any HTTP request to the *analyzed
+   URL* — the offline analyzers are pure string heuristics. The opt-in
+   `--osint` enrichers query infrastructure *about* the domain (DNS, RDAP,
+   crt.sh, ASN) and never the URL itself, are off by default, and fail open.
 2. **URL length cap:** 2048 characters
 3. **File input cap:** 10 MB
 4. **No eval/exec** — no dynamic code execution
-5. **Secure storage:** Config dir `~/.barb/` with 0o700, config file 0o600
-6. **Minimal dependencies:** Typer, Rich, Pydantic, PyYAML, python-dotenv (core only)
-7. **Bundled static data** — no runtime network fetches for data files
-8. **Input sanitization** — strip null bytes and control characters
+5. **Secure storage:** Config dir `~/.barb/` with 0o700, config and
+   user-override data files written 0o600 (atomic `os.replace`)
+6. **Lean dependencies:** Typer, Rich, Pydantic, PyYAML, python-dotenv,
+   shipwright-kit (core); cloud LLM providers are an optional `[llm]` extra
+7. **Bundled static data** — no automatic runtime network fetches for data
+   files; the `update-data` refresh is opt-in and HTTPS-only
+8. **Input sanitization** — strip null bytes and control characters; defanged
+   inputs are refanged with an offline string transform (still never fetched)
 
 ---
 
@@ -139,17 +197,207 @@ barb version
 - PyPI: `pip install barb-phish`
 - MIT License
 - CI: pytest + ruff lint on PR
-- CD: PyPI publish on version tag
+- CD: PyPI publish on version tag (see "Publication" below)
 
-### v1.1 — Backlog (from MeetUp decisions)
+### v1.0 backlog (from MeetUp decisions)
 
-1. **Ollama local LLM support** — for airgapped/privacy-sensitive environments (AI Specialist request, deferred for timeline)
-2. **Domain age via WHOIS** — network-based enrichment (deferred to keep v1.0 offline-only)
-3. **STIX 2.1 export** — standardized threat intelligence format
-4. **vex integration** — pipe JSON between tools for combined IOC + URL analysis
-5. **SQLite cache** — avoid re-analyzing known URLs
-6. **Plugin system** — custom analyzers via entry points
-7. **Re-vote: `send_url` default** — revisit after user feedback (Code Security Agent dissent noted)
+The original v1.0 MeetUp deferred a backlog: Ollama local-LLM support, domain
+age via WHOIS, STIX 2.1 export, vex pipe integration, a SQLite cache, a plugin
+system, and a re-vote on the `send_url` default. The "Version History" section
+below records which of these actually shipped (Ollama, WHOIS-via-RDAP, STIX,
+SQLite cache, vex pipe-only) and which were rejected (plugin system —
+single-purpose tool, analyzers are already Protocol-extensible).
+
+---
+
+## Feature Development / Version History
+
+Every release is grounded in `CHANGELOG.md`. barb follows Semantic Versioning;
+each version is shipped to PyPI as `barb-phish` and (from v1.5.0 on) gets a
+parallel GitHub Release.
+
+### v1.0.0 — Initial release (2026-03-18)
+
+The heuristic phishing-URL analyzer as designed: **8 offline analyzers**
+(entropy, homoglyph, TLD, subdomain, brand, shortener, encoding, IP-URL), the
+5-tier verdict (`SAFE` / `LOW_RISK` / `SUSPICIOUS` / `HIGH_RISK` / `PHISHING`),
+`--explain` with a template default and optional Anthropic/OpenAI providers
+(`[llm]` extra), Rich / console / JSON / CSV output, `ThreadPoolExecutor` batch
+processing, TTY defanging, and the exit-code contract (0 safe/low, 1
+suspicious/high, 2 phishing, 3 error). CI (pytest matrix + ruff) and tag-driven
+PyPI publishing (`barb-phish`) shipped from day one.
+
+### v1.1.0 — OSINT enrichment (2026-04-02)
+
+The first deferred backlog item landed: **opt-in network enrichment** behind a
+`--osint` flag, fail-open (an enricher failure never blocks analysis). Two
+enrichers, both stdlib-only with no API key:
+
+- **DNS resolution** (`socket.getaddrinfo`) — sinkhole/loopback and NXDOMAIN
+  signals.
+- **RDAP** (IANA bootstrap, `urllib`) — domain registration age and
+  privacy-redaction signals. RDAP (RFC 7480–7484) replaced the planned
+  `python-whois` dependency, so no `[osint]` extra was needed.
+
+New `osint` config keys (`dns_timeout`, `rdap_timeout`, `cache_ttl_hours`).
+
+### v1.2.0 — Offline heuristic upgrade + scoring tuning (2026-05-30)
+
+Three new offline analyzers and a scoring overhaul:
+
+- **`typosquat`** — ASCII brand lookalikes via Levenshtein distance 1–2 and
+  digit↔letter substitution (`paypa1.com`, `g00gle.com`), skipping official
+  brand domains.
+- **`keyword`** — one aggregated LOW signal for phishing keywords in the
+  path/query (`login`, `verify`, `secure`, `webscr`, `bank`, …).
+- **`lexical`** — LOW signals for URL length, hyphen count, and host digit
+  ratio.
+- Homoglyph **mixed-script** detection (Latin + Cyrillic in one label); pure
+  non-ASCII IDN labels now emit an informational LOW signal instead of
+  inflating the score.
+- Curated `data/allowlist.json` (71 entries) + **allowlist suppression** —
+  domain-based signals are suppressed for known-good registrable domains while
+  path/userinfo signals still fire (a trusted domain is not a safe URL).
+- **SQLite OSINT cache** (`~/.barb/cache.db`) with configurable TTL and a
+  `--no-cache` flag.
+- Scoring: `@`-obfuscation on a domain host (`paypal.com@evil.com`) is now
+  **CRITICAL**; a **severity-floor** rule (any CRITICAL floors the verdict at
+  `HIGH_RISK`, any HIGH at `SUSPICIOUS` — only escalates, never lowers).
+
+### v1.3.0 — "Prove & Integrate" (2026-05-31)
+
+Detection quality became measurable and machine-output broadened:
+
+- **`file_ext`** analyzer (the **12th** offline heuristic) — double-extension
+  masquerade (`invoice.pdf.exe`) → HIGH, single executable/script extension →
+  LOW, archive extension → INFO.
+- **NDJSON** (`-o ndjson`) and **STIX 2.1** (`-o stix`) output formats. The
+  STIX bundle emits `indicator` objects for URLs scored SUSPICIOUS or higher,
+  with deterministic IDs and verdict-mapped confidence.
+- **Offline evaluation harness** (`eval/`, a dev tool) measuring
+  precision/recall/F1 against a labeled CSV, wired into CI as a
+  detection-quality regression gate (`--min-precision` / `--min-recall`).
+- CLI hardening: empty/malformed URLs and unknown `--output` values are now
+  rejected with a clear error and exit code 3; a top-level `--version` flag was
+  added; Rich output hides INFO-severity signals when the verdict is SAFE.
+
+### v1.4.0 — "Enrichment & Currency" (2026-06-01)
+
+The `--osint` enricher set grew from two to **four**, all opt-in, fail-open,
+stdlib-only, and never fetching the analyzed URL:
+
+- **crt.sh** certificate-transparency enricher — recently-issued-cert recency
+  signal (MEDIUM < 7 d, LOW < 30 d, INFO if no CT records); sends only the
+  hostname.
+- **ASN enrichment** (Team Cymru WHOIS over stdlib socket) — an INFO-only
+  context signal carrying the resolved IP's AS number, name, country and BGP
+  prefix; analyst pivot context, zero score impact.
+- **Ollama explain provider** (`provider: ollama`) — local-LLM summaries with
+  no data leaving the host and no API key; falls back to the template explainer
+  if Ollama is unreachable.
+- **`update-data`** command — opt-in HTTPS refresh of the Tranco-based
+  allowlist into a user-override file (`~/.barb/data/allowlist.json`); never
+  automatic, non-HTTPS rejected, atomic write with `0o600`, bundled curated
+  list stays the default.
+- Full user manual (`docs/MANUAL.md`) and README badges.
+
+At this point barb is at its current shape: **12 offline analyzers**, `--osint`
+= DNS + RDAP + crt.sh + ASN.
+
+### v1.4.1 — Detection-quality patch + honesty (2026-06-01)
+
+A real-corpus run (OpenPhish + Tranco, via the new `eval/fetch_corpus.py`)
+exposed brand/typosquat **false positives on legitimate domains** — e.g.
+`dns.google` scoring PHISHING because `"com"` matched brand `"zoom"` and the
+`"ing"` bank brand fired on `booking.com`. On an 800-URL corpus (300 phishing /
+500 benign, alert tier SUSPICIOUS) the fixes moved:
+
+| Metric    | Before | After  |
+|-----------|--------|--------|
+| Precision | 0.4597 | 1.0000 |
+| FP        | 67     | 0      |
+| Recall    | 0.1900 | 0.0733 |
+
+The three fixes: typosquat de-stacking + short-label/dist-2 length guards;
+brand own-registrable-domain skip + short-brand whole-token guard + expanded
+official-domain lists (Google CDN/regional domains, Amazon, Apple, …); and five
+measured abuse-heavy TLDs added (`.cfd`, `.help`, `.sbs`, `.lat`, `.casa`). The
+35 "lost" true positives were false positives in disguise — correct catches for
+the wrong reason. A "Detection quality (measured)" section was added to the
+README and manual with the honest pre-filter framing.
+
+### v1.5.0 — Documentation + built-in manual (2026-06-01)
+
+- A comprehensive **vex-style `docs/` set** (`getting-started.md`,
+  `commands.md`, `analyzers.md`, `osint.md`, `output-formats.md`,
+  `configuration.md`, `pipeline.md`, plus a `docs/README.md` index).
+- A built-in **`barb manual`** command — a terminal usage guide with six topics
+  (`analyzers`, `osint`, `output`, `config`, `pipeline`, `examples`) plus an
+  overview mode. The new command is why this is a minor (not patch) bump.
+- `publish.yml` gained a **GitHub Release** job (`softprops/action-gh-release`)
+  that runs parallel to the PyPI publish, both gated on the test job — one tag
+  push ships both.
+
+### v1.5.1 — Accept defanged IOCs on input (2026-06-01)
+
+SOC analysts paste defanged indicators straight from reports. barb previously
+rejected `hxxp://paypal[.]com@evil[.]tk` with "Invalid IPv6 URL"; it now
+**refangs every input URL before parsing** — `hxxp(s)://`, `[.]`/`(.)`/`[dot]`,
+`[at]`, `[://]`, fullwidth Unicode, zero-width characters. This is a pure
+offline string transform (it never fetches the URL), is idempotent, and
+preserves IPv6 (`[::1]`). The refang patterns were ported from the sibling
+`sift` tool.
+
+### v1.6.0 — Shipwright onboarding (2026-06-05)
+
+barb began consuming the shared **shipwright-kit** library (the common
+Shipwright engine, published to PyPI and consumed by vex, barb, and sift):
+
+- **Eval delegates** to `shipwright_kit.eval` — corpus loading, binarization,
+  the confusion tally and the metric math now come from the shared harness.
+  barb keeps its own Rich rendering and per-tier breakdown. Eval numbers are
+  byte-identical.
+- **The eval `--json` output now carries a `schema_version` field** (the N6
+  schema-contract), and a guard test pins it, so a change to the shared eval
+  result shape can't silently break consumers.
+- **Config delegates** to `shipwright_kit.config` (the resolve→load→validate
+  skeleton + secure app-dir), while barb keeps its `AppConfig` schema and the
+  `BARB_LLM_KEY` override.
+- The dependency is **`shipwright-kit>=0.6.0,<0.7.0` resolved from PyPI**
+  (previously a git URL), so `pip install barb-phish` resolves cleanly.
+
+**Two packaging bugs were caught and fixed at publish time:**
+
+1. `shipwright-kit` was declared only in `[dependency-groups] dev`, but
+   `barb/config.py` imports it **at runtime** — so a plain `pip install
+   barb-phish` would have raised `ImportError`. It was moved to
+   `[project.dependencies]`, and a clean-room install verified the fix.
+2. The `publish.yml` gate ran `pip install .[dev]` followed by a bare `ruff` —
+   but dev tools live in a PEP-735 `[dependency-groups]` block, and pip's
+   `[dev]` *extra* does not install dependency-groups, so the step failed with
+   `ruff: command not found` (silently blocking releases since the dep-groups
+   migration). The gate was switched to `uv sync --dev` + `uv run`.
+
+**Why share an engine.** Pulling eval and config into shipwright-kit means a
+fix to the corpus loader, the metric math, or the config resolver is made
+**once and propagates to all three tools** (vex / barb / sift) instead of being
+copied and drifting per project. The `schema_version` contract makes that
+shared shape an explicit, test-guarded API rather than an implicit one.
+
+### Identity — what barb is (and is not)
+
+A MeetUp on 2026-06-01 fixed barb's identity: **barb is a high-precision URL
+pre-filter, not a standalone phishing catch-all.** Its measured real-corpus
+recall of roughly **7%** (precision 1.00, FP-rate 0.00 on the 800-URL offline
+corpus) is **by design**, a direct consequence of the never-fetch wall: barb
+only ever inspects URL *structure* and opt-in *infrastructure-about-the-domain*
+signals. Phishing that uses clean URLs on legitimate hosting carries no
+URL-structural tell, so catching it requires fetching and inspecting content or
+reputation — that is the job of the downstream tools (`vex`, `sift`) and the
+pipeline, not of barb. The team rejected lowering thresholds to chase recall
+(it reintroduces false positives) and publishes the honest precision/recall
+numbers in the docs. The one wall-compliant recall lever left to investigate is
+the marginal recall of `--osint` (RDAP age + crt.sh recency) on a live corpus.
 
 ---
 
@@ -193,10 +441,41 @@ barb version
 
 ---
 
+## Publication
+
+- **GitHub:** https://github.com/duathron/barb (tags v1.0.0 → v1.6.0; from
+  v1.5.0 onward `publish.yml` auto-creates a parallel GitHub Release from the
+  CHANGELOG section).
+- **PyPI:** published as **`barb-phish`** (install: `pip install barb-phish`;
+  CLI command and import package: `barb`).
+- **Publishing flow:** a version tag triggers `publish.yml`, which is gated on
+  the test job (ruff + pytest via `uv`) and publishes to PyPI through an **OIDC
+  Trusted Publisher**. The publish job runs under a `pypi` GitHub **Environment**
+  configured with a **required human reviewer**, so no release reaches PyPI
+  without an explicit approval and a green build.
+- **License:** MIT.
+
+---
+
 ## Current Status
 
-**Phase:** Project scaffold created and renamed to `barb`. Ready for implementation.
-**Next steps:** Evening 1 — Foundation (config, models, URL parser, analyzer protocol, data files).
+**Phase:** **v1.6.0 shipped** (2026-06-05) — live on PyPI as `barb-phish`
+1.6.0.
+
+- 12 offline analyzers; `--osint` enrichment over DNS + RDAP + crt.sh + ASN
+  (opt-in, fail-open); `--explain` with template / Anthropic / OpenAI / Ollama
+  providers; Rich / console / JSON / NDJSON / CSV / STIX 2.1 output.
+- Consumes the shared **shipwright-kit** library from PyPI
+  (`>=0.6.0,<0.7.0`): eval delegates to `shipwright_kit.eval` (with the
+  `schema_version` N6 contract and a guard test), config to
+  `shipwright_kit.config`.
+- **368 tests passing**, ruff clean, CI green; releases gated by the
+  reviewer-approved `pypi` Environment.
+- **Identity:** high-precision URL pre-filter — real-corpus precision 1.00 /
+  recall ~0.07 / FP-rate 0.00, recall capped by design (the never-fetch wall;
+  content/reputation recall is the downstream vex/sift job).
+- **Next investigation:** measure the marginal recall of `--osint` (RDAP age +
+  crt.sh recency) on a live corpus — the only wall-compliant recall lever.
 
 ---
 
