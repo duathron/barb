@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-05
+
+Minor release: Shipwright eval/config now consumed from PyPI, plus the eval schema-version contract.
+
+### Added
+- Eval `--json` output now carries a `schema_version` field (and a guard test pins it), so a change to the shared eval result shape can't silently break consumers (N6 schema-contract).
+
+### Changed
+- Detection-quality eval delegates corpus loading, binarization, confusion tally and metric math to `shipwright_kit.eval`; config loading delegates to `shipwright_kit.config` — eliminating duplicated logic. Eval numbers and config behaviour are unchanged.
+- Dependency `shipwright-kit` is now resolved from **PyPI** (`>=0.6.0,<0.7.0`) instead of a git URL, so `pip install barb-phish` resolves cleanly.
+
+### Fixed
+- Defensive parsing of external OSINT enricher responses (RDAP/crt.sh) so malformed/edge-case payloads no longer raise.
+
 ## [1.5.1] - 2026-06-01
 
 ### Fixed
