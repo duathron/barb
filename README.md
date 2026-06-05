@@ -377,6 +377,13 @@ The offline core makes **zero** outbound connections. When you opt into `--osint
 
 ---
 
+## Author
+
+**Christian Huhn** — building security tooling for SOC/DFIR workflows.
+
+- GitHub: [@duathron](https://github.com/duathron)
+- LinkedIn: [Christian Huhn](https://www.linkedin.com/in/christian-huhn-76a407114)
+
 ## License
 
 MIT License. See [LICENSE.md](LICENSE.md).

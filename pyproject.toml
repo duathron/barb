@@ -9,9 +9,7 @@ description = "Heuristic phishing URL analyzer for SOC/DFIR workflows"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [
-    { name = "Christian Huhn", email = "duathron@gmail.com" },
-]
+authors = [{ name = "Christian Huhn" }]
 keywords = ["phishing", "url-analysis", "security", "soc", "dfir", "homoglyph", "cli"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -49,6 +47,7 @@ barb = "barb.main:main"
 Homepage = "https://github.com/duathron/barb"
 Repository = "https://github.com/duathron/barb"
 "Bug Tracker" = "https://github.com/duathron/barb/issues"
+LinkedIn = "https://www.linkedin.com/in/christian-huhn-76a407114"
 
 [tool.setuptools.packages.find]
 include = ["barb*"]
