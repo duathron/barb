@@ -11,9 +11,10 @@ from typing import Optional
 
 import yaml
 from pydantic import BaseModel
+from shipwright_kit.config import app_dir
+from shipwright_kit.config import load_config as _resolve_config
 
-_APP_DIR = Path.home() / ".barb"
-_DIR_MODE = 0o700
+_APP_DIR = app_dir("barb")  # ~/.barb (path only; created lazily by callers that need it)
 _FILE_MODE = 0o600
 
 
@@ -97,21 +98,21 @@ class AppConfig(BaseModel):
 
 def _ensure_app_dir() -> Path:
     """Create application directory with secure permissions."""
-    _APP_DIR.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
-    return _APP_DIR
+    return app_dir("barb", create=True)
+
+
+def _load_yaml(path: Path) -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
 
 
 def load_config(config_path: Optional[Path] = None) -> AppConfig:
     """Load configuration from YAML file with env var overrides."""
-    data: dict = {}
-
-    # Load from file
-    paths = [p for p in [config_path, _APP_DIR / "config.yaml", Path("config.yaml")] if p and p.exists()]
-    if paths:
-        with open(paths[0]) as f:
-            data = yaml.safe_load(f) or {}
-
-    config = AppConfig(**data)
+    config = _resolve_config(
+        [config_path, _APP_DIR / "config.yaml", Path("config.yaml")],
+        loader=_load_yaml,
+        validator=lambda data: AppConfig(**data),
+    )
 
     # Env var overrides
     llm_key = os.getenv("BARB_LLM_KEY")
