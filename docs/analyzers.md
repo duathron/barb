@@ -145,6 +145,19 @@ Alert tier: verdict ≥ SUSPICIOUS counts as a positive detection.
 > - **vex** for VirusTotal / AbuseIPDB reputation lookup on barb's flagged URLs.
 > - **sift** for alert correlation across the full event stream.
 
+### With `--osint` (measured, barb 1.6.0)
+
+`--osint` does **not** improve recall on **live** phishing. Measured on a fresh
+corpus (OpenPhish + Tranco, snapshot 2026-06-07), recall across the 123 *resolving*
+phishing domains was **0.154 with and without `--osint` (Δ = 0)** — RDAP, crt.sh,
+and ASN caught zero live domains the offline core missed. The only recall `--osint`
+adds is flagging **non-resolving (taken-down) domains** via DNS NXDOMAIN — genuine
+**retro-triage** value for IOC-list sweeps, not live detection, and it costs a
+false positive (1 benign domain here). Use `--osint` for takedown confirmation and
+analyst context, not as a live-recall booster. See
+[osint.md — Recall](osint.md#recall-what---osint-does-and-does-not-add-measured)
+for the live/dead split and full reasoning.
+
 ### CI regression gate vs. field measurement
 
 The repo contains a synthetic fixture (`eval/fixtures/`) that drives a

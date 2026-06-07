@@ -28,6 +28,44 @@ Source of truth: `barb/osint/` (enricher implementations), `barb/config.py`
 
 ---
 
+## When to use `--osint`
+
+`--osint` is **not** a "find more phishing" switch. It adds **no live-phishing
+recall** — measured Δ = 0 across resolving phishing domains (see
+[Recall](#recall-what---osint-does-and-does-not-add-measured)). Turn it on for
+**infrastructure context and takedown status on a domain you are already
+investigating**, not to catch more URLs. Concretely it buys:
+
+1. **Takedown / retro-triage** — the DNS enricher flags domains that no longer
+   resolve (NXDOMAIN). Sweeping an old IOC list, this tells you which phishing
+   infrastructure is already dead or sinkholed. (This is the only effect that
+   shows up as "recall" — and it's list hygiene, not live detection.)
+2. **Sinkhole / loopback catch** — DNS emits HIGH when a domain resolves to a
+   known sinkhole or a loopback address (infrastructure already flagged bad).
+3. **Per-URL analyst context** (intel for a human decision, not a score change):
+   - **ASN** — hosting attribution: AS number, name, country, BGP prefix (pivot
+     on the hosting provider). INFO, zero score impact.
+   - **RDAP** — domain age and a registrant-privacy flag ("registered 3 days ago"
+     is a datapoint worth having).
+   - **crt.sh** — certificate recency / CT-log presence.
+   - **DNS** — where the host actually resolves.
+
+> [!NOTE]
+> The recall result is **threat-profile-dependent**. RDAP domain-age *would*
+> contribute against campaigns built on freshly-registered domains — those exist.
+> The corpus measured here (OpenPhish) skews to phishing on **compromised / old
+> hosting and free platforms** (`github.io`, `pages.dev`), where domains aren't
+> new, so RDAP-age never fires. "No recall bonus" is proven for that profile,
+> untested for a fresh-registration-heavy one.
+
+**Costs:** network latency, a privacy footprint (your resolver, the TLD RDAP
+registry, crt.sh/Sectigo, and Team Cymru each learn the domain you're
+investigating — see [Privacy footprint](#privacy-footprint)), and occasional DNS
+false positives (a transient or geo-blocked legitimate domain can look like
+NXDOMAIN).
+
+---
+
 ## Opt-in, fail-open, cached
 
 ### Opt-in
@@ -73,6 +111,62 @@ OSINT signals appear in the same signals table as offline signals, prefixed with
 their analyzer name (`osint:dns`, `osint:rdap`, `osint:crtsh`, `osint:asn`). The
 ASN enricher always emits an INFO signal — it carries no score points but gives
 analyst context (AS number, name, country, prefix).
+
+---
+
+## Recall: what `--osint` does and does not add (measured)
+
+Measured on a fresh corpus (OpenPhish phishing + Tranco benign, built via
+`eval/fetch_corpus.py`, scored via `eval/run_eval.py --osint`), identical rows
+offline vs. with `--osint`. Snapshot 2026-06-07, barb 1.6.0. Live feeds — a
+reproducible snapshot, not a fixed guarantee.
+
+The headline number (`--osint` lifts whole-corpus recall ~0.12 → ~0.31) is
+**misleading on its own**, so it is split by whether the phishing domain still
+resolves. Of 300 OpenPhish URLs, 123 still resolved (live) and 177 did not
+(taken down / sinkholed → NXDOMAIN).
+
+| Phishing subset | Offline recall | With `--osint` | Δ |
+|-----------------|----------------|----------------|---|
+| **Live (resolving), n=123** | 0.154 | **0.154** | **+0.00 — zero new domains** |
+| Dead (NXDOMAIN), n=177 | 17/177 | 69/177 | +52, all from the DNS "does not resolve" signal |
+
+> [!IMPORTANT]
+> **`--osint` did not improve live-phishing recall at all** — Δ was exactly
+> zero across 123 resolving domains; not one was newly caught. **RDAP, crt.sh,
+> and ASN caught zero live phishing** the offline core missed.
+>
+> The entire apparent "lift" is the DNS enricher flagging **non-resolving
+> (taken-down) domains**. That is genuine **retro-triage** value — sweeping an
+> old IOC list to confirm infrastructure is gone — but it is **not** live-threat
+> detection, and it is an artifact of corpus staleness (OpenPhish entries are
+> largely dead by the time you fetch them).
+>
+> **Why the enrichers whiff on live phishing:** the resolving phishing in this
+> corpus sits on **old / compromised hosting and free platforms** (`github.io`,
+> `pages.dev`, hacked legitimate sites) — *not* freshly-registered attacker
+> domains — so RDAP domain-age never fires. The signals barb's enrichers measure
+> are structurally mismatched to where live phishing actually lives.
+>
+> **Cost:** `--osint` still adds false positives — 1 benign domain flagged here
+> (`osint:dns` HIGH on a legitimate host). The recall "signal" (DNS) is the same
+> mechanism as the FP, so precision is bound to DNS reliability at run time.
+
+**Bottom line:** use `--osint` for **retro-triage of IOC lists** (confirming
+takedowns) and for the analyst *context* it adds (RDAP age, ASN, CT history) —
+**not** as a live-phishing recall booster, which it measurably is not. Real
+recall on live phishing remains the downstream pipeline's job (vex reputation,
+sift correlation, content inspection). RDAP's value against a corpus of genuinely
+fresh attacker registrations is **untested here** — it is unmeasured, not proven.
+
+### Reproduce
+
+```bash
+python -m eval.fetch_corpus                                  # OpenPhish + Tranco → eval/corpus/real.csv
+python -m eval.run_eval --corpus eval/corpus/real.csv        # offline
+python -m eval.run_eval --corpus eval/corpus/real.csv --osint  # + OSINT
+# then split by resolution to separate taken-down (NXDOMAIN) from live domains
+```
 
 ---
 

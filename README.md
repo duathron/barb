@@ -244,8 +244,10 @@ Evaluated against a labeled corpus of **800 URLs** — 300 phishing (OpenPhish f
 | Recall | **0.07** — 22 of 300 phishing URLs caught |
 | False-positive rate | **0.00** — 0 of 500 benign URLs flagged |
 
+`--osint` does **not** improve live-phishing recall: measured on a fresh corpus (snapshot 2026-06-07, barb 1.6.0), recall across the resolving phishing domains was identical with and without it (Δ = 0) — RDAP/crt.sh/ASN caught no live domain the offline core missed. Its only recall contribution is flagging **taken-down (non-resolving) domains** via DNS NXDOMAIN — retro-triage value for IOC-list sweeps, not live detection, at a small false-positive cost. See [docs/osint.md](docs/osint.md#recall-what---osint-does-and-does-not-add-measured) for the live/dead split.
+
 > [!IMPORTANT]
-> barb is a **high-precision URL-structure pre-filter**, not a standalone catch-all. Trust a positive — when barb flags SUSPICIOUS or higher, it is reliable. Low recall is by design: barb analyzes URL structure only and never fetches the URL, so phishing on clean domains (`github.io`, `pages.dev`, plain `.com`) is an inherent limit of URL-only heuristics. That recall gap is the downstream pipeline's job: feed barb's JSON into **vex** (reputation/VirusTotal) and **sift** (correlation), and use **`--osint`** for fresh-domain signals (RDAP age, crt.sh recency) that the offline core misses.
+> barb is a **high-precision URL-structure pre-filter**, not a standalone catch-all. Trust a positive — when barb flags SUSPICIOUS or higher, it is reliable. Low recall is by design: barb analyzes URL structure only and never fetches the URL, so phishing on clean domains (`github.io`, `pages.dev`, plain `.com`) is an inherent limit of URL-only heuristics. That recall gap is the downstream pipeline's job: feed barb's JSON into **vex** (reputation/VirusTotal) and **sift** (correlation). `--osint` adds infrastructure *context* (DNS, RDAP age, crt.sh, ASN) and takedown retro-triage — it does **not** measurably lift live-phishing recall.
 
 The repo also includes a **CI regression gate** using a synthetic fixture (precision 1.00 / recall 0.76). That fixture is not a field measurement — it exists to catch score-regression between releases.
 
