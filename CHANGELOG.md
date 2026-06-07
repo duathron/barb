@@ -5,6 +5,16 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.1](https://github.com/duathron/barb/compare/v1.6.0...v1.6.1) (2026-06-07)
+
+
+### Documentation
+
+* **changelog:** note attribution metadata change under Unreleased ([860dcac](https://github.com/duathron/barb/commit/860dcac3a425c31295943577c8bffc13683df049))
+* correct --osint framing — context/retro-triage, not a recall booster ([cf840ac](https://github.com/duathron/barb/commit/cf840ac433312f147f7a422cd55e34b65acbc72b))
+* **meta:** attribution — GitHub + LinkedIn; drop personal email from metadata ([18a6b57](https://github.com/duathron/barb/commit/18a6b579dbf0bb33ab462a0705010819ef20221b))
+* update project_documentation.md through v1.6.0 ([129b5da](https://github.com/duathron/barb/commit/129b5daa39f0d4eccbcc4ab8955291f04a88e7c8))
+
 ## [Unreleased]
 
 ### Changed
