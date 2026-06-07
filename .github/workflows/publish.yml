@@ -1,94 +1,46 @@
 name: Publish (PyPI + GitHub Release)
-
+# release-please opens/merges the release PR, bumps the version (pyproject +
+# barb/__init__.py), tags it, and creates the GitHub Release. On a freshly
+# created release this same workflow builds + publishes barb-phish to PyPI via
+# an OIDC Trusted Publisher (no long-lived token). The publish job runs DIRECTLY
+# here (not via a reusable workflow) so the OIDC workflow claim is unambiguously
+# `publish.yml` — the PyPI Trusted Publisher is matched to this filename. The
+# `pypi` GitHub Environment (required reviewer) gates the upload.
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  test:
-    name: Gate — test + lint the tagged commit
+  release-please:
+    name: Release PR / tag
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
     steps:
-      - name: Checkout source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
-
-      - name: Sync (incl. dev dependency-group)
-        run: uv sync --dev
-
-      - name: Lint with ruff
-        run: uv run ruff check .
-
-      - name: Run tests
-        run: uv run pytest -q
-
-  build-and-publish:
-    name: Build and publish barb-phish
-    needs: test  # publish only if the tagged commit passes lint + tests
+  publish:
+    name: Build + publish barb-phish to PyPI (OIDC)
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write  # required for Trusted Publishers (OIDC)
-
+      id-token: write # OIDC token for the Trusted Publisher
     steps:
-      - name: Checkout source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-        with:
-          python-version: "3.11"
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        run: python -m build
-
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Build distributions
+        run: uv build
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
-          skip-existing: true
-
-  github-release:
-    name: Create GitHub Release
-    needs: test  # parallel to the PyPI publish; both gated on lint + tests
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # required to create the release
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-      - name: Extract changelog section for this tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          awk -v v="$VERSION" '
-            $0 ~ "^## \\[" v "\\]" {flag=1; next}
-            flag && /^## \[/ {exit}
-            flag {print}
-          ' CHANGELOG.md > RELEASE_NOTES.md
-          if [ ! -s RELEASE_NOTES.md ]; then
-            echo "Release ${GITHUB_REF_NAME}" > RELEASE_NOTES.md
-          fi
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-        with:
-          name: "barb ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
-          body_path: RELEASE_NOTES.md
+          attestations: true
