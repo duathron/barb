@@ -32,7 +32,7 @@
 | Analyzer Interface | typing.Protocol (structural typing) | `vex/enrichers/protocol.py` |
 | Config System | YAML + env vars + CLI flags, Pydantic validation | `vex/config.py` |
 | Terminal Output | Rich panels, tables, color-coded verdicts | `vex/output/formatter.py` |
-| Batch Processing | ThreadPoolExecutor + Rich progress bar | `vex/batch.py` |
+| Batch Processing | Sequential loop (offline heuristics are microsecond-fast; no parallelism needed) | `barb/main.py` |
 | URL Defanging | Copied from vex (no cross-project dependency) | `vex/defang.py` |
 
 ### Module Structure (current — v1.6.0)
@@ -58,7 +58,6 @@ barb/
 ├── defang.py             # URL defang / refang (offline string transform)
 ├── allowlist.py          # Tranco allowlist suppression for domain-based signals
 ├── cache.py              # SQLite OSINT result cache (~/.barb/cache.db, TTL)
-├── batch.py              # Parallel batch processing (ThreadPoolExecutor)
 ├── data_update.py        # `update-data` — opt-in HTTPS allowlist refresh
 ├── version_check.py      # GitHub release check
 ├── analyzers/            # 12 offline heuristics (no network)
@@ -222,8 +221,8 @@ The heuristic phishing-URL analyzer as designed: **8 offline analyzers**
 (entropy, homoglyph, TLD, subdomain, brand, shortener, encoding, IP-URL), the
 5-tier verdict (`SAFE` / `LOW_RISK` / `SUSPICIOUS` / `HIGH_RISK` / `PHISHING`),
 `--explain` with a template default and optional Anthropic/OpenAI providers
-(`[llm]` extra), Rich / console / JSON / CSV output, `ThreadPoolExecutor` batch
-processing, TTY defanging, and the exit-code contract (0 safe/low, 1
+(`[llm]` extra), Rich / console / JSON / CSV output, sequential URL analysis,
+TTY defanging, and the exit-code contract (0 safe/low, 1
 suspicious/high, 2 phishing, 3 error). CI (pytest matrix + ruff) and tag-driven
 PyPI publishing (`barb-phish`) shipped from day one.
 
@@ -405,7 +404,7 @@ the marginal recall of `--osint` (RDAP age + crt.sh recency) on a live corpus.
 
 ### Decision 1: Single `analyze` subcommand (not triage/investigate split)
 **Vote:** Unanimous (7/7)
-**Rationale:** Unlike vex where triage and investigate have fundamentally different API call depths, every URL in this tool receives the same heuristic battery. Batch processing is simply parallelized single analysis. One subcommand keeps the interface clean.
+**Rationale:** Unlike vex where triage and investigate have fundamentally different API call depths, every URL in this tool receives the same heuristic battery. barb analyzes URLs sequentially — offline heuristics are microsecond-fast, so parallelism was never needed. One subcommand keeps the interface clean.
 
 ### Decision 2: 5-tier verdict system
 **Vote:** 6 For / 1 Abstain
