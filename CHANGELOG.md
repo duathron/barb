@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **Suspicious-TLD list: data-driven re-weighting (B1).** Added `.shop`, `.ink`, `.vip` to the abuse-TLD list, measured against a fresh 800-URL real corpus (300 OpenPhish / 500 Tranco). Each is a generic gTLD with `phishing ≥ 2 / benign 0` in-corpus **and** independent abuse-list corroboration. Corpus counts: `.shop` 14/0, `.ink` 4/0, `.vip` 2/0. **ccTLD candidates (`.id` 4/0, `.et` 4/0, `.bi`, `.py`, `.nf`, `.bn`) were deliberately NOT added** — 2–4 hits on a country-code TLD with real national legit use is a sample-size artifact, not a precision guarantee. Eval before/after on the same corpus: **precision 1.0000 → 1.0000 (FP unchanged at 0)**, recall 0.1567 → 0.1633. Selection rule is a conscious tightening over v1.4.1 (which accepted `.casa` at +1/0).
 - Project metadata: added a LinkedIn link to the package URLs (shown in the PyPI sidebar) and a README **Author** section; removed the personal email from `authors` — contact is via GitHub issues / LinkedIn.
 
 ## [1.6.0] - 2026-06-05
