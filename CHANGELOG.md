@@ -5,6 +5,19 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0](https://github.com/duathron/barb/compare/v1.6.1...v1.7.0) (2026-06-12)
+
+
+### Features
+
+* allowlist staleness warning + aggregated batch summary (Tier-2) ([2c1ba00](https://github.com/duathron/barb/commit/2c1ba0070db8bd8ff1a4526ff7c792f0ac311b62))
+* **detection:** data-driven abuse-TLD re-weighting (B1) ([0fa5dc9](https://github.com/duathron/barb/commit/0fa5dc9f24b6039ad227303022746ed17e1add99))
+
+
+### Documentation
+
+* document on-main 1.7.0 features (allowlist-staleness, batch-summary) ([92c2557](https://github.com/duathron/barb/commit/92c2557d3a9cdf42e6464a2101517c3be4659e81))
+
 ## [1.6.1](https://github.com/duathron/barb/compare/v1.6.0...v1.6.1) (2026-06-07)
 
 
