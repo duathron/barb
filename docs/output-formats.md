@@ -268,6 +268,27 @@ Use `-o stix` for SIEM or TIP ingest.
 
 ---
 
+## Batch summary (N>1 URLs)
+
+When you analyze more than one URL with `rich` or `console` output, barb opens with an **aggregate summary block** before the per-URL results. The block shows a verdict histogram (how many URLs landed at each tier), the top signals seen across the batch, and the share of results at or above `--threshold`.
+
+```bash
+barb analyze -f urls.txt -q
+```
+
+The per-URL detail follows the aggregate block. Pass `--summary-only` to suppress it and show only the aggregate view:
+
+```bash
+barb analyze -f urls.txt --summary-only -q
+```
+
+> [!NOTE]
+> `--summary-only` applies to rich and console output only. **JSON, NDJSON, CSV, and STIX output are completely unchanged** — the flag is ignored when any of those formats is selected. Piping to a downstream tool (e.g. `| vex triage --from-barb`) works exactly as before.
+
+`--summary-only` has no effect when analyzing a single URL.
+
+---
+
 ## Threshold and exit-code interaction
 
 `--threshold INT` filters which URLs appear in output: only URLs with

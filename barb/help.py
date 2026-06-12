@@ -75,6 +75,12 @@ Select with [bold]-o[/bold] / [bold]--output[/bold].
   [cyan]csv[/cyan]       Spreadsheet import; signals joined in signals_summary column
   [cyan]stix[/cyan]      STIX 2.1 bundle with indicator SDOs for SUSPICIOUS+ URLs
 
+[bold]BATCH SUMMARY (N>1 URLs):[/bold]
+  rich / console output opens with an aggregate block: verdict histogram,
+  top signals across the batch, share at or above --threshold.
+  [bold]--summary-only[/bold]  suppress per-URL detail — show only the aggregate block.
+  JSON / NDJSON / CSV / STIX are unchanged; piping to downstream tools is unaffected.
+
 [bold]DEFANG RULES:[/bold]
   rich / console:       URLs always defanged (hxxps[://]evil[.]com) — TTY safety
   json / ndjson / csv:  Original URL preserved; defanged_url field also present
@@ -108,6 +114,8 @@ Priority chain (first match wins):
   output.default_format      rich | console | json | ndjson | csv | stix
   output.quiet               suppress banner by default (false)
   osint.cache_ttl_hours      OSINT result cache TTL in ~/.barb/cache.db (default: 6)
+  allowlist_check.enabled    true — set false to silence the staleness hint
+  allowlist_check.max_age_days  90 — warn when the allowlist is older than this
 
 [bold]ENVIRONMENT VARIABLE:[/bold]
   [cyan]BARB_LLM_KEY[/cyan]   API key for anthropic or openai explain providers
@@ -168,6 +176,11 @@ barb is stage 1 in a three-tool SOC/DFIR chain:
 [bold]Batch from file:[/bold]
   [green]barb analyze -f urls.txt -o json -q[/green]
   [green]barb analyze -f urls.txt -o csv -q > results.csv[/green]
+
+[bold]Batch summary (aggregate view):[/bold]
+  [green]barb analyze -f urls.txt -q[/green]                  # opens with verdict histogram + top signals
+  [green]barb analyze -f urls.txt --summary-only -q[/green]   # aggregate only; per-URL detail suppressed
+  Note: json/ndjson/csv/stix output is unaffected by --summary-only
 
 [bold]Stdin pipe:[/bold]
   [green]cat urls.txt | barb analyze -o ndjson -q[/green]

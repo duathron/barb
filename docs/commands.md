@@ -3,7 +3,7 @@
 [← Docs index](README.md)
 
 Every command and flag below is taken verbatim from `barb <cmd> --help` on
-`barb 1.5.1`. Nothing here is invented.
+`barb 1.6.1` (on-main, pending 1.7.0). Nothing here is invented.
 
 ```
 barb [OPTIONS] COMMAND [ARGS]...
@@ -46,6 +46,7 @@ can be combined in a single invocation.
 | `--quiet` | `-q` | flag | off | Suppress the banner. |
 | `--no-defang` | — | flag | off | Disable URL defanging in output (defanging is on by default for `rich`/`console`). |
 | `--threshold` | `-t` | int | `0` | Minimum risk score to report. URLs below the threshold are silently dropped from output. |
+| `--summary-only` | — | flag | off | For N>1 URLs: show only the aggregated summary block; suppress per-URL detail. No effect on json/ndjson/csv/stix output or single-URL runs. |
 
 ### Analysis flags
 
@@ -147,6 +148,21 @@ barb analyze -f urls.txt -o json --threshold 4 -q
 Only URLs with `risk_score >= 4` appear in output. Exit code reflects the worst
 verdict among reported URLs.
 
+**Example — batch summary (aggregate view, N>1 URLs):**
+
+```bash
+barb analyze -f urls.txt -q
+```
+
+For N>1 URLs, rich and console output open with an aggregate block: a verdict histogram, the top signals across the batch, and the share of results at or above `--threshold`. The per-URL detail follows. Pass `--summary-only` to suppress the per-URL detail and show only the aggregate block.
+
+```bash
+barb analyze -f urls.txt --summary-only -q
+```
+
+> [!NOTE]
+> `--summary-only` has no effect on json, ndjson, csv, or stix output. Machine formats are unchanged — piping to downstream tools works exactly as before.
+
 **Example — stdin pipe:**
 
 ```bash
@@ -213,6 +229,9 @@ output:
 update_check:
   enabled: true
   check_interval_hours: 24
+allowlist_check:
+  enabled: true
+  max_age_days: 90
 osint:
   dns_timeout: 2.0
   rdap_timeout: 5.0

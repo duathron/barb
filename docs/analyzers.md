@@ -11,7 +11,7 @@ access, no API key, no external calls.
 |----------|-----------------|-----------------|--------|---------|
 | **entropy** | High Shannon entropy in host or path — indicates generated/random labels | MEDIUM | 1.0 | `x7k2m9p.evil.com` |
 | **homoglyph** | Unicode confusable characters and mixed-script labels (Latin + Cyrillic in the same label); pure non-ASCII IDN emits a LOW informational signal | HIGH / LOW | 1.5 | `pаypal.com` (Cyrillic `а`) |
-| **tld** | Suspicious top-level domains associated with phishing | MEDIUM | 1.0 | `paypal-login.tk` |
+| **tld** | Suspicious top-level domains associated with phishing; the list is data-driven (corpus-verified, precision 1.0 maintained on every addition); recent additions include `.shop`, `.ink`, and `.vip` | MEDIUM | 1.0 | `paypal-login.shop` |
 | **subdomain** | Excessive subdomain depth or domain-squatting patterns | MEDIUM | 1.0 | `secure.paypal.com.evil.com` |
 | **brand** | Brand name appears in a domain that is not the brand's own registrar | MEDIUM–HIGH | 1.2 | `paypal-secure.evil.com` |
 | **shortener** | Known URL shortener services that obscure the real destination | MEDIUM | 0.8 | `bit.ly/abc123` |
@@ -102,6 +102,9 @@ behavior.
 > Allowlist suppression applies to domain-based signals only. A known-good domain
 > hosting a suspicious path (e.g. `paypal.com/verify?token=…`) will still fire
 > `keyword` and `file_ext` signals if the path triggers them.
+
+> [!TIP]
+> barb prints a stderr hint when the effective allowlist (user override or bundled) is older than 90 days: `allowlist is N days old — run 'barb update-data' to refresh`. The check is offline (file mtime), never blocks analysis, and can be silenced via `allowlist_check.enabled: false` in `~/.barb/config.yaml`. See [Configuration → allowlist\_check](configuration.md#allowlist_check).
 
 ---
 

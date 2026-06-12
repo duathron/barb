@@ -29,8 +29,10 @@ Built-in guide: `barb manual` (and `barb manual analyzers` / `osint` / `pipeline
 - **Zero API keys required** for core analysis — offline, no external calls
 - **Opt-in `--osint` enrichment**: DNS resolution + RDAP registration lookups + crt.sh CT-log queries + ASN lookup (stdlib only, no API key); never fetches the analyzed URL
 - **Allowlist false-positive suppression**: ~71 known-good domains suppress noisy domain-based signals; path/query signals still fire
+- **Allowlist staleness warning**: offline stderr hint when the Tranco allowlist is older than 90 days — run `barb update-data` to refresh; opt-out via `allowlist_check.enabled: false` in config; never blocks analysis
 - **OSINT result cache**: SQLite cache at `~/.barb/cache.db` (default TTL 6 h); bypass with `--no-cache`
 - **Output formats**: Rich tables, console, JSON, NDJSON, CSV, STIX 2.1
+- **Batch summary**: for N>1 URLs, rich/console output opens with an aggregate block — verdict histogram, top signals, share above `--threshold`; use `--summary-only` to suppress per-URL detail. Machine formats (json/ndjson/csv/stix) are unchanged.
 - **`--explain` flag**: template-based explanation by default, optional LLM (Anthropic Claude, OpenAI, or local Ollama)
 - **`--version` flag**: report the installed version (`barb --version` or `barb version`)
 - **Offline eval harness** (`eval/`): measures precision/recall/F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate
@@ -109,6 +111,16 @@ barb analyze https://suspicious-site.tk/paypal-login --osint --no-cache
 ```bash
 cat urls.txt | barb analyze -o csv
 ```
+
+**Batch summary — aggregate view across N URLs:**
+
+```bash
+barb analyze -f urls.txt             # rich output opens with a verdict histogram + top signals
+barb analyze -f urls.txt --summary-only  # aggregate block only; per-URL detail suppressed
+```
+
+> [!NOTE]
+> `--summary-only` affects only rich and console output. JSON, NDJSON, CSV, and STIX output are completely unchanged — piping to a downstream tool works exactly as before.
 
 **Refresh the allowlist from Tranco (opt-in):**
 
@@ -208,7 +220,7 @@ barb analyze http://evil.tk/login -o stix
 |----------|----------------|---------|
 | **Entropy** | High Shannon entropy in domain/path | `x7k2m9p.evil.com` |
 | **Homoglyph** | Unicode confusables + mixed-script labels (Latin+Cyrillic); pure non-ASCII IDN emits a LOW informational signal | `pаypal.com` (Cyrillic 'а') |
-| **TLD** | Suspicious top-level domains | `paypal-login.tk` |
+| **TLD** | Suspicious top-level domains associated with phishing; data-driven list includes `.tk`, `.xyz`, `.shop`, `.ink`, `.vip`, and others (precision 1.0 maintained on every addition) | `paypal-login.shop` |
 | **Subdomain** | Excessive depth / squatting patterns | `secure.paypal.com.evil.com` |
 | **Brand** | Brand name in non-brand domain | `paypal-secure.evil.com` |
 | **Shortener** | Known URL shortener services | `bit.ly/abc123` |
@@ -292,6 +304,10 @@ osint:
   crtsh_timeout: 8         # seconds per crt.sh request
   asn_timeout: 3           # seconds per ASN (Team Cymru) lookup
   cache_ttl_hours: 6       # SQLite cache TTL (~/.barb/cache.db)
+
+allowlist_check:
+  enabled: true            # set false to silence the staleness hint entirely
+  max_age_days: 90         # warn when the effective allowlist is older than this
 ```
 
 **Environment variable:** Set `BARB_LLM_KEY` for cloud LLM API key (Anthropic / OpenAI).

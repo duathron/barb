@@ -75,6 +75,10 @@ update_check:
   enabled: true
   check_interval_hours: 24
 
+allowlist_check:
+  enabled: true            # set false to silence the staleness hint entirely
+  max_age_days: 90         # warn when the effective allowlist is older than this
+
 osint:
   dns_timeout: 2.0        # seconds
   rdap_timeout: 5.0       # seconds
@@ -176,6 +180,25 @@ and falls back to the template explainer. The command always completes.
 |-----|---------|---------|
 | `enabled` | `true` | Passive PyPI version check. |
 | `check_interval_hours` | `24` | How often to check for a newer version. |
+
+### `allowlist_check`
+
+barb prints a one-line stderr hint when the effective Tranco allowlist is older than `max_age_days`. The check reads only the file modification time — it is offline, never blocks analysis, and produces no output when the allowlist is fresh.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `enabled` | `true` | When `false`, the staleness hint is never shown. |
+| `max_age_days` | `90` | Warn when the allowlist file is older than this many days. |
+
+The *effective* allowlist is the user-override file (`~/.barb/data/allowlist.json`) when it exists; otherwise the bundled curated list. Run `barb update-data` to refresh the user-override allowlist and silence the hint.
+
+```yaml
+allowlist_check:
+  enabled: false    # silence the hint permanently
+```
+
+> [!NOTE]
+> This hint goes to stderr only. Machine output (json/ndjson/csv/stix) on stdout is unaffected.
 
 ### `osint`
 

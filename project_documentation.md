@@ -1,6 +1,6 @@
 # barb — Project Documentation
 
-*Recorded by Project Documentation Agent — 2026-03-17, maintained through v1.6.0 (2026-06-05)*
+*Recorded by Project Documentation Agent — 2026-03-17, maintained through v1.6.1 + on-main features pending v1.7.0 (2026-06-12)*
 
 > This document covers barb's full history: the original design phase (the
 > records below under "The Idea" and "Design Decisions" are the v1.0 MeetUp
@@ -383,6 +383,39 @@ fix to the corpus loader, the metric math, or the config resolver is made
 copied and drifting per project. The `schema_version` contract makes that
 shared shape an explicit, test-guarded API rather than an implicit one.
 
+### v1.6.1 — `__version__` fix + attribution (2026-06-07)
+
+A release-please run on top of v1.6.0:
+
+- **`__version__` literal fix** — `barb/__init__.py` was reporting `1.5.1` while the installed dist was `1.6.0`; corrected to `1.6.1` and enforced by shipwright's `python-ci.yml@v0.7.0` version-consistency guard.
+- The `release-please` config now includes a `generic` updater covering `barb/__init__.py` and an `x-release-please-version` annotation so future bumps keep dist and import versions in sync (needed because the dist name `barb-phish` ≠ import package `barb`).
+- Attribution metadata (`__author__`, `__repo__`) added to `barb/__init__.py`.
+- `--osint` honesty docs (recall investigation results) finalized.
+
+### On-main pending v1.7.0 (HEAD as of 2026-06-12)
+
+Three batches of work are on `main`, Skeptic-approved, and will roll into the `release-please` 1.7.0 PR.
+
+#### B1 — Abuse-TLD list: `.shop`, `.ink`, `.vip` added
+
+Three generic gTLDs were added to `data/suspicious_tlds.json` after corpus verification (300 OpenPhish / 500 Tranco, snapshot 2026-06-11). All three met the inclusion threshold: corpus `phishing ≥ 2 / benign = 0` plus external abuse-corroboration. Country-code TLD candidates (`.id`, `.et`, `.bi`, `.py`, `.nf`, `.bn`) were **held** — 2–4 phishing hits on a country-code TLD is a sample artifact, not a precision guarantee. Measured impact on the 800-URL corpus: precision 1.0000 → 1.0000 (FP = 0), recall 0.1567 → 0.1633. No two-tier severity change (data did not support HIGH). This is a data-file-only change; no analyzer logic was altered.
+
+#### B2 — Offline allowlist-staleness warning
+
+barb now prints a one-line stderr hint when the effective Tranco allowlist (user override at `~/.barb/data/allowlist.json`, or the bundled curated list) is older than `allowlist_check.max_age_days` (default 90):
+
+```
+  allowlist is N days old — run `barb update-data` to refresh
+```
+
+The check reads only the file modification time — no network call, no blocking. It is emitted alongside the banner (before per-URL output) and routes to stderr, so machine output on stdout is unaffected. It can be silenced via `allowlist_check.enabled: false` in `~/.barb/config.yaml`. Source: `barb/allowlist_staleness.py`.
+
+#### B3 — Aggregated batch summary + `--summary-only`
+
+For N>1 URLs, rich and console output now open with an **aggregate summary block** before per-URL results. The block includes a verdict histogram, the top signals seen across the batch, and the share of results at or above `--threshold`.
+
+The new `--summary-only` flag (confirmed in `barb analyze --help`) suppresses the per-URL detail and shows only the aggregate block. It has no effect on JSON, NDJSON, CSV, or STIX output — machine formats are completely unchanged.
+
 ### Identity — what barb is (and is not)
 
 A MeetUp on 2026-06-01 fixed barb's identity: **barb is a high-precision URL
@@ -458,8 +491,7 @@ the marginal recall of `--osint` (RDAP age + crt.sh recency) on a live corpus.
 
 ## Current Status
 
-**Phase:** **v1.6.0 shipped** (2026-06-05) — live on PyPI as `barb-phish`
-1.6.0.
+**Phase:** **v1.6.1 shipped** (2026-06-07) — live on PyPI as `barb-phish 1.6.1`. **v1.7.0 pending** (release-please PR open) — rolls in B1/B2/B3 from main.
 
 - 12 offline analyzers; `--osint` enrichment over DNS + RDAP + crt.sh + ASN
   (opt-in, fail-open); `--explain` with template / Anthropic / OpenAI / Ollama
@@ -468,13 +500,11 @@ the marginal recall of `--osint` (RDAP age + crt.sh recency) on a live corpus.
   (`>=0.6.0,<0.7.0`): eval delegates to `shipwright_kit.eval` (with the
   `schema_version` N6 contract and a guard test), config to
   `shipwright_kit.config`.
-- **368 tests passing**, ruff clean, CI green; releases gated by the
-  reviewer-approved `pypi` Environment.
+- **On main (pending 1.7.0):** B1 abuse-TLD additions (`.shop`/`.ink`/`.vip`, precision 1.0 held); B2 offline allowlist-staleness warning (stderr, file-mtime, opt-outable); B3 aggregated batch summary + `--summary-only` (machine formats unchanged). 395 tests, Skeptic clean-APPROVE.
 - **Identity:** high-precision URL pre-filter — real-corpus precision 1.00 /
   recall ~0.07 / FP-rate 0.00, recall capped by design (the never-fetch wall;
   content/reputation recall is the downstream vex/sift job).
-- **Next investigation:** measure the marginal recall of `--osint` (RDAP age +
-  crt.sh recency) on a live corpus — the only wall-compliant recall lever.
+- **`--osint` recall measured (2026-06-07):** adds zero live-phishing recall (Δ = 0 across 123 resolving domains); retro-triage value only (DNS NXDOMAIN on taken-down domains). Documented honestly in `docs/osint.md`.
 
 ---
 
