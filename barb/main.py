@@ -261,6 +261,16 @@ def analyze(
     explain: Annotated[bool, typer.Option("--explain", "-e", help="Add explanation to output")] = False,
     threshold: Annotated[int, typer.Option("--threshold", "-t", help="Minimum risk score to report")] = 0,
     no_defang: Annotated[bool, typer.Option("--no-defang", help="Disable URL defanging in output")] = False,
+    summary_only: Annotated[
+        bool,
+        typer.Option(
+            "--summary-only",
+            help=(
+                "For N>1 URLs: show only the aggregated summary block; suppress per-URL detail output. "
+                "No effect on JSON/NDJSON/CSV/pipe formats or single-URL analysis."
+            ),
+        ),
+    ] = False,
     osint: Annotated[
         bool,
         typer.Option(
@@ -302,6 +312,8 @@ def analyze(
             quiet=quiet or config.output.quiet,
             update_check_enabled=config.update_check.enabled,
             check_interval_hours=config.update_check.check_interval_hours,
+            allowlist_check_enabled=config.allowlist_check.enabled,
+            allowlist_max_age_days=config.allowlist_check.max_age_days,
         )
 
     # Collect URLs from all sources
@@ -357,14 +369,20 @@ def analyze(
 
     # Output
     defang = not no_defang
-    _output_results(results, output, defang)
+    _output_results(results, output, defang, summary_only=summary_only, threshold=threshold)
 
     # Exit code = worst verdict
     worst = max(results, key=lambda r: r.risk_score)
     raise typer.Exit(worst.verdict.exit_code)
 
 
-def _output_results(results: list[AnalysisResult], fmt: str, defang: bool) -> None:
+def _output_results(
+    results: list[AnalysisResult],
+    fmt: str,
+    defang: bool,
+    summary_only: bool = False,
+    threshold: int = 0,
+) -> None:
     """Route results to the appropriate output formatter."""
     if fmt == "json":
         from barb.output.export import to_json, to_json_list
@@ -390,21 +408,32 @@ def _output_results(results: list[AnalysisResult], fmt: str, defang: bool) -> No
         typer.echo(to_csv(results), nl=False)
 
     elif fmt == "console":
-        from barb.output.formatter import format_console
+        from barb.output.formatter import format_console, format_console_aggregate_summary
 
-        for result in results:
-            format_console(result, defang=defang)
+        # Aggregate summary for N>1 (plain console format previously had none)
+        if len(results) > 1:
+            format_console_aggregate_summary(results, threshold=threshold)
+
+        # Per-URL detail blocks (suppressed by --summary-only for N>1)
+        if not (summary_only and len(results) > 1):
+            for result in results:
+                format_console(result, defang=defang)
 
     else:
         # Rich (default)
-        from barb.output.formatter import format_batch_summary, format_rich
+        from barb.output.formatter import format_aggregate_summary, format_batch_summary, format_rich
 
         if len(results) == 1:
             format_rich(results[0], defang=defang)
         else:
+            # Aggregated header block (new)
+            format_aggregate_summary(results, threshold=threshold)
+            # Existing per-URL summary table (always shown)
             format_batch_summary(results)
-            for result in results:
-                format_rich(result, defang=defang)
+            # Per-URL detail blocks (suppressed by --summary-only)
+            if not summary_only:
+                for result in results:
+                    format_rich(result, defang=defang)
 
 
 @app.command()

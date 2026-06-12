@@ -76,6 +76,13 @@ class UpdateCheckConfig(BaseModel):
     check_interval_hours: int = 24
 
 
+class AllowlistCheckConfig(BaseModel):
+    """Allowlist staleness check configuration."""
+
+    enabled: bool = True
+    max_age_days: int = 90
+
+
 class OsintConfig(BaseModel):
     """OSINT enrichment configuration (opt-in, network-dependent)."""
 
@@ -93,6 +100,7 @@ class AppConfig(BaseModel):
     explain: ExplainConfig = ExplainConfig()
     output: OutputConfig = OutputConfig()
     update_check: UpdateCheckConfig = UpdateCheckConfig()
+    allowlist_check: AllowlistCheckConfig = AllowlistCheckConfig()
     osint: OsintConfig = OsintConfig()
 
 

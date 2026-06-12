@@ -22,6 +22,8 @@ def show_banner(
     quiet: bool = False,
     update_check_enabled: bool = True,
     check_interval_hours: int = 24,
+    allowlist_check_enabled: bool = True,
+    allowlist_max_age_days: int = 90,
 ) -> None:
     """Print the barb ASCII-art banner to stderr.
 
@@ -49,3 +51,14 @@ def show_banner(
                 print("  pip install --upgrade barb-phish", file=sys.stderr)
         except Exception:
             pass
+
+    # Allowlist staleness notice (offline, non-blocking, fail-silent)
+    try:
+        from .allowlist_staleness import check_allowlist_staleness
+
+        check_allowlist_staleness(
+            max_age_days=allowlist_max_age_days,
+            enabled=allowlist_check_enabled,
+        )
+    except Exception:
+        pass

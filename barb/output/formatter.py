@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -131,3 +133,115 @@ def format_batch_summary(results: list[AnalysisResult]) -> None:
 
     console.print(table)
     console.print()
+
+
+# Ordered verdict tiers for display (worst-first)
+_VERDICT_ORDER = [
+    RiskVerdict.PHISHING,
+    RiskVerdict.HIGH_RISK,
+    RiskVerdict.SUSPICIOUS,
+    RiskVerdict.LOW_RISK,
+    RiskVerdict.SAFE,
+]
+
+
+def format_aggregate_summary(
+    results: list[AnalysisResult],
+    threshold: int = 0,
+) -> None:
+    """Print an aggregated header block for N>1 batch results.
+
+    Shows a verdict histogram, top signals across all URLs, and the share
+    over *threshold*.  For N≤1 this is a no-op (single-URL path unchanged).
+
+    Output goes to the module-level ``console`` (stdout).  Machine formats
+    (JSON/NDJSON/CSV/pipe) never call this function.
+    """
+    if len(results) <= 1:
+        return
+
+    n = len(results)
+
+    # --- Verdict histogram ---
+    hist: Counter[RiskVerdict] = Counter(r.verdict for r in results)
+
+    hist_table = Table(title=f"Aggregate Summary  ({n} URLs)", box=box.ROUNDED)
+    hist_table.add_column("Verdict", width=14)
+    hist_table.add_column("Count", justify="right", width=8)
+    hist_table.add_column("Share", justify="right", width=8)
+
+    for verdict in _VERDICT_ORDER:
+        count = hist.get(verdict, 0)
+        pct = count * 100 / n
+        icon = _VERDICT_ICON.get(verdict, verdict.value)
+        hist_table.add_row(icon, str(count), f"{pct:.0f}%")
+
+    console.print(hist_table)
+
+    # --- Threshold share ---
+    if threshold > 0:
+        over = sum(1 for r in results if r.risk_score >= threshold)
+        pct_over = over * 100 / n
+        console.print(f"  [bold]{over}[/bold] / {n} URLs exceeded threshold {threshold} ({pct_over:.0f}%)")
+        console.print()
+
+    # --- Top signals across all URLs ---
+    signal_counts: Counter[str] = Counter()
+    for r in results:
+        for s in r.signals:
+            signal_counts[f"{s.analyzer}: {s.label}"] += 1
+
+    if signal_counts:
+        top_n = min(5, len(signal_counts))
+        sig_table = Table(title="Top Signals (batch-wide)", box=box.SIMPLE, show_edge=False)
+        sig_table.add_column("Signal", style="cyan")
+        sig_table.add_column("URLs affected", justify="right", width=14)
+
+        for label, count in signal_counts.most_common(top_n):
+            sig_table.add_row(label, str(count))
+
+        console.print(sig_table)
+        console.print()
+
+
+def format_console_aggregate_summary(
+    results: list[AnalysisResult],
+    threshold: int = 0,
+) -> None:
+    """Print a plain-text aggregated summary block for N>1 results.
+
+    For N≤1 this is a no-op (single-URL path unchanged).
+    Output goes to stdout via plain ``print``.
+    """
+    if len(results) <= 1:
+        return
+
+    n = len(results)
+    hist: Counter[RiskVerdict] = Counter(r.verdict for r in results)
+
+    print("=== Batch Aggregate Summary ===")
+    print(f"Total URLs: {n}")
+    print("Verdict breakdown:")
+    for verdict in _VERDICT_ORDER:
+        count = hist.get(verdict, 0)
+        pct = count * 100 / n
+        print(f"  {verdict.value:12s} {count:4d}  ({pct:.0f}%)")
+
+    if threshold > 0:
+        over = sum(1 for r in results if r.risk_score >= threshold)
+        pct_over = over * 100 / n
+        print(f"Over threshold {threshold}: {over} / {n} ({pct_over:.0f}%)")
+
+    # Top 5 signals
+    signal_counts: Counter[str] = Counter()
+    for r in results:
+        for s in r.signals:
+            signal_counts[f"{s.analyzer}: {s.label}"] += 1
+
+    if signal_counts:
+        top_n = min(5, len(signal_counts))
+        print("Top signals:")
+        for label, count in signal_counts.most_common(top_n):
+            print(f"  {count:3d}x  {label}")
+
+    print()
