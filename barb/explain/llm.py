@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import urllib.error
-import urllib.request
+
+from shipwright_kit.llm import anthropic_complete, ollama_generate, openai_complete
 
 from ..models import AnalysisResult
 from .prompt import SYSTEM_PROMPT, build_prompt
@@ -34,13 +35,14 @@ class AnthropicExplainer:
             defanged_url=defanged_url,
         )
 
-        response = self._client.messages.create(
+        return anthropic_complete(
+            client=self._client,
             model=self._model,
             max_tokens=512,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+            user=user_prompt,
+            extract="index0",
         )
-        return response.content[0].text
 
 
 class OpenAIExplainer:
@@ -67,15 +69,13 @@ class OpenAIExplainer:
             defanged_url=defanged_url,
         )
 
-        response = self._client.chat.completions.create(
+        return openai_complete(
+            client=self._client,
             model=self._model,
             max_tokens=512,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            system=SYSTEM_PROMPT,
+            user=user_prompt,
         )
-        return response.choices[0].message.content or ""
 
 
 class OllamaExplainer:
@@ -103,25 +103,16 @@ class OllamaExplainer:
             defanged_url=defanged_url,
         )
 
-        payload = json.dumps(
-            {
-                "model": self._model,
-                "system": SYSTEM_PROMPT,
-                "prompt": user_prompt,
-                "stream": False,
-            }
-        ).encode()
-
         try:
-            req = urllib.request.Request(
-                f"{self._host}/api/generate",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
+            response_text = ollama_generate(
+                base_url=self._host,
+                model=self._model,
+                system=SYSTEM_PROMPT,
+                user=user_prompt,
+                timeout=self._TIMEOUT,
+                system_mode="field",
             )
-            with urllib.request.urlopen(req, timeout=self._TIMEOUT) as resp:
-                body = json.loads(resp.read().decode())
-            return body["response"].strip()
+            return response_text.strip()
         except (urllib.error.URLError, OSError) as exc:
             raise RuntimeError(f"Ollama request failed (is `ollama serve` running at {self._host}?): {exc}") from exc
         except (json.JSONDecodeError, KeyError) as exc:
