@@ -5,6 +5,13 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.1](https://github.com/duathron/barb/compare/v1.7.0...v1.7.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* harden workflows against aikido findings ([25fc668](https://github.com/duathron/barb/commit/25fc6684cfb49d460439805d8d635429f1ad9136))
+
 ## [1.7.0](https://github.com/duathron/barb/compare/v1.6.1...v1.7.0) (2026-06-12)
 
 
