@@ -5,6 +5,13 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.3](https://github.com/duathron/barb/compare/v1.7.2...v1.7.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* never silently substitute a template for a failed LLM explanation (F2 cut-1) ([c6ab3ae](https://github.com/duathron/barb/commit/c6ab3ae315259e32e1fbed6a227dfe7af75b7bcf))
+
 ## [1.7.2](https://github.com/duathron/barb/compare/v1.7.1...v1.7.2) (2026-07-02)
 
 
