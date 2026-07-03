@@ -5,6 +5,13 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.2](https://github.com/duathron/barb/compare/v1.7.1...v1.7.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* retrofit LLM explainers onto shipwright_kit.llm transport (W3 cut-1) ([cc2699a](https://github.com/duathron/barb/commit/cc2699a65041ae7189abd1fd2de37eacd178b554))
+
 ## [1.7.1](https://github.com/duathron/barb/compare/v1.7.0...v1.7.1) (2026-07-02)
 
 
