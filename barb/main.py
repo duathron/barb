@@ -18,6 +18,11 @@ from barb.models import AnalysisResult
 from barb.scoring import compute_risk_score, determine_verdict
 from barb.url_parser import parse_url
 
+# F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md): reserved
+# exit code for a degraded explanation (a REQUESTED LLM provider failed).
+# Distinct from the verdict codes (0/1/2) and the CLI-usage error code (3).
+_EXIT_EXPLANATION_DEGRADED = 4
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -178,70 +183,96 @@ def _analyze_single(
         analyzed_at=datetime.now(timezone.utc),
     )
 
-    # Explanation (if requested)
+    # Explanation (if requested) — _explain mutates result in place.
     if explain:
-        result.explanation = _explain(result, config)
+        _explain(result, config)
 
     return result
 
 
-def _explain(result: AnalysisResult, config: AppConfig) -> str:
-    """Generate explanation using configured provider."""
+def _explain(result: AnalysisResult, config: AppConfig) -> None:
+    """Populate ``result.explanation`` using the configured provider.
+
+    Mutates *result* in place (rather than returning a string) because on an
+    LLM-provider failure it must set three fields, not one.
+
+    F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md):
+    a REQUESTED LLM provider (anthropic/openai/ollama) that fails must NEVER
+    (a) silently substitute a TemplateExplainer — the analyst would read a
+    rule-based template believing it was an LLM explanation — nor (b) crash
+    the process. The old anthropic/openai branches had no try/except, so an
+    uncaught SDK error exited 1, colliding with the SUSPICIOUS/HIGH_RISK
+    verdict code (a crash read as a real risk verdict); the old ollama branch
+    caught and silently fell back to a template. Both are the bug. Now every
+    provider's build + explain() is wrapped in one handler: on failure the URL
+    VERDICT still stands (barb's primary output — never lost), the explanation
+    is left unavailable (``explanation=None``), and it is loudly flagged on
+    stderr + machine-marked (``explanation_degraded``/``explanation_provider``)
+    for the degraded exit code in ``analyze()``. A deliberate ``template``
+    provider (no LLM requested) is never degraded.
+    """
     provider = config.explain.provider
 
-    if provider == "anthropic":
-        from barb.explain.llm import AnthropicExplainer
-
-        if not config.explain.api_key:
-            typer.echo(
-                "Error: API key required for Anthropic. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml",
-                err=True,
-            )
-            return ""
-        explainer = AnthropicExplainer(
-            api_key=config.explain.api_key,
-            model=config.explain.model or "claude-sonnet-4-20250514",
-        )
-        return explainer.explain(result, send_url=config.explain.send_url)
-
-    elif provider == "openai":
-        from barb.explain.llm import OpenAIExplainer
-
-        if not config.explain.api_key:
-            typer.echo(
-                "Error: API key required for OpenAI. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml",
-                err=True,
-            )
-            return ""
-        explainer = OpenAIExplainer(
-            api_key=config.explain.api_key,
-            model=config.explain.model or "gpt-4o-mini",
-        )
-        return explainer.explain(result, send_url=config.explain.send_url)
-
-    elif provider == "ollama":
-        from barb.explain.llm import OllamaExplainer
-
-        explainer = OllamaExplainer(
-            host=config.explain.ollama_host,
-            model=config.explain.model or "llama3.1",
-        )
-        try:
-            return explainer.explain(result, send_url=config.explain.send_url)
-        except RuntimeError as exc:
-            typer.echo(
-                f"Note: Ollama explanation failed ({exc}); falling back to template explanation.",
-                err=True,
-            )
-            from barb.explain.template import TemplateExplainer
-
-            return TemplateExplainer().explain(result)
-
-    else:
-        # Template fallback (default — no API key needed)
+    if provider == "template":
+        # Deliberate, no LLM requested — never degraded.
         from barb.explain.template import TemplateExplainer
 
-        return TemplateExplainer().explain(result)
+        result.explanation = TemplateExplainer().explain(result)
+        return
+
+    if provider not in ("anthropic", "openai", "ollama"):
+        # Unrecognized provider — preserve the historical template fallback
+        # (not an LLM request, so not a "provider failure").
+        from barb.explain.template import TemplateExplainer
+
+        result.explanation = TemplateExplainer().explain(result)
+        return
+
+    # A REAL LLM provider was requested. Build + call inside ONE try so that a
+    # build-time failure (missing SDK -> ImportError; missing API key ->
+    # RuntimeError) routes through the same never-silent-template, never-crash
+    # handler as a runtime API failure.
+    try:
+        if provider == "anthropic":
+            from barb.explain.llm import AnthropicExplainer
+
+            if not config.explain.api_key:
+                raise RuntimeError(
+                    "API key required for Anthropic. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml"
+                )
+            explainer = AnthropicExplainer(
+                api_key=config.explain.api_key,
+                model=config.explain.model or "claude-sonnet-4-20250514",
+            )
+            result.explanation = explainer.explain(result, send_url=config.explain.send_url)
+
+        elif provider == "openai":
+            from barb.explain.llm import OpenAIExplainer
+
+            if not config.explain.api_key:
+                raise RuntimeError("API key required for OpenAI. Set BARB_LLM_KEY or configure in ~/.barb/config.yaml")
+            explainer = OpenAIExplainer(
+                api_key=config.explain.api_key,
+                model=config.explain.model or "gpt-4o-mini",
+            )
+            result.explanation = explainer.explain(result, send_url=config.explain.send_url)
+
+        else:  # provider == "ollama"
+            from barb.explain.llm import OllamaExplainer
+
+            explainer = OllamaExplainer(
+                host=config.explain.ollama_host,
+                model=config.explain.model or "llama3.1",
+            )
+            result.explanation = explainer.explain(result, send_url=config.explain.send_url)
+    except Exception as exc:  # noqa: BLE001 — any provider failure degrades, never crashes
+        typer.echo(
+            f"⚠ EXPLANATION UNAVAILABLE — provider '{provider}' failed: {exc}",
+            err=True,
+        )
+        result.explanation = None
+        result.explanation_degraded = True
+        result.explanation_provider = provider
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +401,17 @@ def analyze(
     # Output
     defang = not no_defang
     _output_results(results, output, defang, summary_only=summary_only, threshold=threshold)
+
+    # Exit code. F2 cut-1 (2026-07-03 MeetUp): a degraded explanation (a
+    # REQUESTED LLM provider failed) exits with a NEW reserved code (4),
+    # distinct from barb's verdict codes (0/1/2) and the CLI-usage error code
+    # (3). It takes priority over the verdict code — a degraded run always
+    # needs operator attention, and reusing a verdict code would recreate the
+    # crash-exits-1-as-SUSPICIOUS collision this fix exists to kill. The
+    # `explanation_degraded` field is the machine-legible signal; the verdict
+    # itself (barb's primary, still-valid output) is unaffected.
+    if any(r.explanation_degraded for r in results):
+        raise typer.Exit(_EXIT_EXPLANATION_DEGRADED)
 
     # Exit code = worst verdict
     worst = max(results, key=lambda r: r.risk_score)

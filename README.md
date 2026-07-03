@@ -37,7 +37,7 @@ Built-in guide: `barb manual` (and `barb manual analyzers` / `osint` / `pipeline
 - **`--version` flag**: report the installed version (`barb --version` or `barb version`)
 - **Offline eval harness** (`eval/`): measures precision/recall/F1 against a labeled URL corpus; wired into CI as a detection-quality regression gate
 - **Batch processing**: analyze URL lists from files, stdin, or multiple arguments
-- **Automation-ready**: exit codes (0=safe, 1=suspicious, 2=phishing, 3=error), `--threshold` filtering
+- **Automation-ready**: exit codes (0=safe, 1=suspicious, 2=phishing, 3=error, 4=explanation degraded — an LLM `--explain` failed; the verdict is still valid, see below), `--threshold` filtering
 - **IOC defanging**: automatic in terminal output (`hxxps[://]evil[.]com`); accepts defanged IOCs on input (`hxxp://`, `[.]`, `[dot]`, `[at]`, fullwidth, zero-width) — refanged before analysis
 - **Configurable scoring**: per-analyzer weights and verdict thresholds via YAML
 - **Minimal dependencies**: 5 core packages (typer, rich, pydantic, pyyaml, python-dotenv)
@@ -325,7 +325,7 @@ explain:
   send_url: false                # maximum privacy: omit URL from prompt
 ```
 
-If Ollama is unreachable when `--explain` is used, barb automatically falls back to the template explainer and prints a note to stderr — the command always completes.
+If an LLM provider (Ollama/Anthropic/OpenAI) fails when `--explain` is used, barb does **not** silently substitute a template explanation (a template masquerading as an LLM verdict would mislead an analyst). Instead the URL verdict still completes — the rule-based verdict is never lost — but the explanation is marked unavailable: a loud `⚠ EXPLANATION UNAVAILABLE` note on stderr, `explanation: null` + `explanation_degraded: true` + `explanation_provider` in the JSON/NDJSON output, and the command exits **4** (distinct from the verdict codes, so a pipeline can tell a degraded explanation from a real verdict). A deliberate `--provider template` run is a normal, non-degraded template explanation (exit reflects the verdict).
 
 ---
 

@@ -76,4 +76,15 @@ class AnalysisResult(BaseModel):
     risk_score: float
     verdict: RiskVerdict
     explanation: Optional[str] = None
+    # F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md):
+    # machine-legible degraded marker for a REQUESTED LLM explanation that
+    # failed. When an LLM provider (anthropic/openai/ollama) errors, the URL
+    # VERDICT above still completes normally (it is barb's primary output),
+    # but `explanation` stays None and these two additive siblings are set
+    # instead — never a silent TemplateExplainer substitution. Additive fields
+    # (no extra="forbid"), so existing JSON consumers are unaffected. A
+    # deliberately-chosen `template` provider (no LLM requested) never sets
+    # these, even though it produces an explanation.
+    explanation_degraded: bool = False
+    explanation_provider: Optional[str] = None
     analyzed_at: datetime

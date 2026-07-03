@@ -83,8 +83,21 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
         # All signals were non-osint INFO — show clean placeholder
         console.print("[dim]No significant signals[/dim]")
 
-    # Explanation
-    if result.explanation:
+    # Explanation. F2 cut-1 (2026-07-03 MeetUp): a degraded explanation (a
+    # requested LLM provider failed) screams a loud banner instead of a
+    # silent template — the verdict above is unaffected.
+    if result.explanation_degraded:
+        console.print()
+        console.print(
+            Panel(
+                f"[bold red]⚠ EXPLANATION UNAVAILABLE[/bold red] — provider "
+                f"'{result.explanation_provider}' failed. The verdict above is unaffected; "
+                "no explanation was generated.",
+                title="Explanation",
+                border_style="red",
+            )
+        )
+    elif result.explanation:
         console.print()
         console.print(Panel(result.explanation, title="Explanation", border_style="dim"))
 
@@ -104,7 +117,14 @@ def format_console(result: AnalysisResult, defang: bool = True) -> None:
         for signal in sorted(result.signals, key=lambda s: s.severity.points, reverse=True):
             print(f"  [{signal.severity.value:8s}] {signal.analyzer:12s} {signal.detail}")
 
-    if result.explanation:
+    # F2 cut-1 (2026-07-03 MeetUp): loud degraded banner, never a silent template.
+    if result.explanation_degraded:
+        print()
+        print(
+            f"⚠ EXPLANATION UNAVAILABLE — provider '{result.explanation_provider}' failed. "
+            "The verdict above is unaffected; no explanation was generated."
+        )
+    elif result.explanation:
         print()
         print("Explanation:")
         print(result.explanation)

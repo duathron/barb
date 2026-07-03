@@ -185,12 +185,30 @@ def test_ollama_explainer_raises_on_missing_key():
 
 
 # ---------------------------------------------------------------------------
-# Dispatch fallback test: _explain() with provider="ollama" + Ollama down
+# Dispatch posture test: _explain() with provider="ollama" + Ollama down
+#
+# FLIPPED for F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md).
+#   OLD posture (pinned here before the flip): when provider=ollama failed,
+#     `_explain` SILENTLY substituted the TemplateExplainer output and returned
+#     it as the explanation string — the analyst received a rule-based template
+#     believing it was an LLM explanation (the exact masquerade the F2 MeetUp
+#     was called to kill; the smoke trigger was the sibling `sift triage
+#     --provider ollama` 404 -> silent template).
+#   NEW posture (asserted below): `_explain` mutates `result` in place — no
+#     template is substituted (`result.explanation is None`), the failure is
+#     machine-marked (`explanation_degraded=True`, `explanation_provider=
+#     "ollama"`), and the process does not crash. The loud stderr notice and
+#     the exit-code-4 behavior are covered at the CLI level in
+#     tests/test_llm_failure_posture.py.
+#   WHY: BLOCK condition (2026-07-03 F2) — "any output where a template reaches
+#     the analyst without a machine degraded/provider marker" must be flipped
+#     with documented before/after. Silent template on an explicitly-requested
+#     provider is a trust violation.
 # ---------------------------------------------------------------------------
 
 
-def test_explain_dispatch_ollama_fallback_to_template():
-    """When provider=ollama and Ollama is unreachable, _explain returns the template explanation."""
+def test_explain_dispatch_ollama_failure_degrades_not_silent_template():
+    """provider=ollama + Ollama unreachable -> degraded marker, NO template, no crash."""
     from barb.main import _explain
 
     result = _make_phishing_result()
@@ -198,9 +216,13 @@ def test_explain_dispatch_ollama_fallback_to_template():
     config = AppConfig()
     config.explain = ExplainConfig(provider="ollama", ollama_host="http://localhost:11434")
 
-    expected_template = TemplateExplainer().explain(result)
+    template_text = TemplateExplainer().explain(result)
 
     with patch("barb.explain.llm.OllamaExplainer.explain", side_effect=RuntimeError("connection refused")):
-        explanation = _explain(result, config)
+        # Must not raise — the old crash-vs-silent-fallback split is gone.
+        _explain(result, config)
 
-    assert explanation == expected_template
+    assert result.explanation is None
+    assert result.explanation != template_text  # no silent template substitution
+    assert result.explanation_degraded is True
+    assert result.explanation_provider == "ollama"

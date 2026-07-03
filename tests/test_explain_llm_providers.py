@@ -36,8 +36,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from barb.config import AppConfig, ExplainConfig
 from barb.explain.llm import AnthropicExplainer, OllamaExplainer, OpenAIExplainer
 from barb.explain.prompt import SYSTEM_PROMPT, build_prompt
+from barb.main import _explain
 from barb.models import AnalysisResult, ParsedURL, RiskVerdict, Signal, SignalSeverity
 
 try:
@@ -220,22 +222,47 @@ class TestOllamaRequestConstruction:
 
 
 class TestOllamaErrorHandlingSupplement:
-    def test_http_error_also_raises_runtime_error(self):
-        """HTTPError is a URLError subclass — pin that it takes the same raise path
-        as a bare connection failure (not a distinct code path)."""
+    """FLIPPED for F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md).
+
+    The RAW OllamaExplainer class still wraps transport errors as RuntimeError
+    (see TestCrossProviderTemperatureAndErrorHandlingComparison, unchanged) —
+    that class-level contract is NOT what F2 changes. F2 changes the POSTURE one
+    layer up, in barb.main._explain: an ollama failure used to become a SILENT
+    TemplateExplainer substitution; it now degrades loudly with a machine
+    marker. These two tests are re-scoped from the bare class (which only ever
+    raised) to _explain (where the observable posture lives).
+    """
+
+    def test_http_error_via_dispatch_degrades_not_silent_template(self):
+        """OLD: an Ollama HTTPError (500) -> RuntimeError -> `_explain` silently
+        returned a TemplateExplainer string. NEW: `_explain` marks the result
+        degraded (provider='ollama'), substitutes no template, and does not
+        crash. WHY: F2 2026-07-03 BLOCK — no silent template on a requested
+        provider failure."""
         result = _make_result()
+        config = AppConfig()
+        config.explain = ExplainConfig(provider="ollama", ollama_host="http://localhost:11434")
         http_err = urllib.error.HTTPError(
             url="http://localhost:11434/api/generate", code=500, msg="Internal Server Error", hdrs=None, fp=None
         )
         with patch("urllib.request.urlopen", side_effect=http_err):
-            with pytest.raises(RuntimeError, match="ollama serve"):
-                OllamaExplainer().explain(result)
+            _explain(result, config)  # must not raise
+        assert result.explanation is None
+        assert result.explanation_degraded is True
+        assert result.explanation_provider == "ollama"
 
-    def test_error_message_includes_configured_host(self):
+    def test_custom_host_url_error_via_dispatch_degrades(self):
+        """OLD: a URLError against a custom host -> RuntimeError mentioning the
+        host -> silent template. NEW: degraded marker via `_explain`, no crash,
+        no template. WHY: F2 2026-07-03 (as above)."""
         result = _make_result()
+        config = AppConfig()
+        config.explain = ExplainConfig(provider="ollama", ollama_host="http://gpu-box:11434")
         with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("refused")):
-            with pytest.raises(RuntimeError, match="http://gpu-box:11434"):
-                OllamaExplainer(host="http://gpu-box:11434").explain(result)
+            _explain(result, config)  # must not raise
+        assert result.explanation is None
+        assert result.explanation_degraded is True
+        assert result.explanation_provider == "ollama"
 
 
 # ---------------------------------------------------------------------------
@@ -356,22 +383,40 @@ class TestAnthropicResponseParsing:
 @requires_anthropic
 class TestAnthropicErrorHandling:
     def test_api_error_propagates_unwrapped_not_reraised(self):
-        """ASYMMETRY vs sift AND vs barb's own OllamaExplainer: explain() has no
-        try/except around messages.create() at all. sift's AnthropicSummarizer
-        catches anthropic.APIError and re-raises as RuntimeError("Anthropic API
-        error..."); barb lets the raw SDK exception fly straight through — and
-        barb.main._explain() has no try/except around the anthropic branch either,
-        so a live API failure reaches the CLI completely unhandled."""
+        """FLIPPED for F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md).
+
+        OLD posture (pinned pre-flip): `explain()` had no try/except and
+        `barb.main._explain()` had none around the anthropic branch either, so a
+        live `anthropic.APIError` flew UNCAUGHT to the CLI — exiting 1, which
+        COLLIDES with the SUSPICIOUS/HIGH_RISK verdict exit code (a crash read
+        as a real risk verdict = a false-escalation generator).
+
+        NEW posture (asserted): the raw AnthropicExplainer class still raises
+        (unchanged — see the comparison table class below), but `_explain` now
+        CATCHES it: `result.explanation` stays None, `explanation_degraded` is
+        True, `explanation_provider == "anthropic"`, and NOTHING propagates (no
+        crash, no silent template).
+
+        WHY: F2 2026-07-03 item 7 — normalize barb's crash-vs-fallback split so
+        a provider failure fails loud-and-controlled, never an uncaught
+        traceback exiting 1-as-SUSPICIOUS."""
         import httpx
 
-        explainer = AnthropicExplainer(api_key="fake-key")
-        mock_client = MagicMock()
-        req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        mock_client.messages.create.side_effect = anthropic.APIError("boom", request=req, body=None)
-        explainer._client = mock_client
+        result = _make_result()
+        config = AppConfig()
+        config.explain = ExplainConfig(provider="anthropic", api_key="fake-key")
 
-        with pytest.raises(anthropic.APIError):
-            explainer.explain(_make_result())
+        req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+        def _boom(self, *a, **k):
+            raise anthropic.APIError("boom", request=req, body=None)
+
+        with patch.object(AnthropicExplainer, "explain", _boom):
+            _explain(result, config)  # must not raise
+
+        assert result.explanation is None
+        assert result.explanation_degraded is True
+        assert result.explanation_provider == "anthropic"
 
 
 # ---------------------------------------------------------------------------
@@ -466,17 +511,30 @@ class TestOpenAIResponseParsing:
 @requires_openai
 class TestOpenAIErrorHandling:
     def test_api_error_propagates_unwrapped_not_reraised(self):
-        """Same asymmetry as Anthropic: no try/except anywhere wraps or catches it."""
+        """FLIPPED for F2 cut-1 (2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md).
+
+        OLD posture: identical to Anthropic — no try/except anywhere, so an
+        `openai.APIError` reached the CLI uncaught (exit 1, colliding with the
+        SUSPICIOUS verdict code). NEW posture: `_explain` catches it -> degraded
+        marker (provider='openai'), no crash, no silent template. WHY: F2
+        2026-07-03 item 7 (same rationale as the Anthropic flip above)."""
         import httpx
 
-        explainer = OpenAIExplainer(api_key="fake-key")
-        mock_client = MagicMock()
-        req = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
-        mock_client.chat.completions.create.side_effect = openai.APIError("boom", request=req, body=None)
-        explainer._client = mock_client
+        result = _make_result()
+        config = AppConfig()
+        config.explain = ExplainConfig(provider="openai", api_key="fake-key")
 
-        with pytest.raises(openai.APIError):
-            explainer.explain(_make_result())
+        req = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+
+        def _boom(self, *a, **k):
+            raise openai.APIError("boom", request=req, body=None)
+
+        with patch.object(OpenAIExplainer, "explain", _boom):
+            _explain(result, config)  # must not raise
+
+        assert result.explanation is None
+        assert result.explanation_degraded is True
+        assert result.explanation_provider == "openai"
 
 
 # ---------------------------------------------------------------------------
@@ -516,8 +574,17 @@ class TestCrossProviderTemperatureAndErrorHandlingComparison:
     than barb's Ollama (which raises, and depends on a separate CLI-layer catch to
     achieve any fallback at all — the OllamaExplainer class by itself has zero
     fallback behavior; only barb.main._explain() supplies it, and only for the
-    ollama provider branch). Anthropic/OpenAI in barb have NO fallback path
-    anywhere — a live API failure is a hard, unhandled crash today.
+    ollama provider branch).
+
+    NOTE (F2 cut-1, 2026-07-03 MeetUp — 2026-07-03-f2-llm-failure-posture.md):
+    the RAW PROVIDER-CLASS behavior pinned in this table is unchanged — Ollama
+    still wraps as RuntimeError, Anthropic/OpenAI still raise their bare SDK
+    exception. What changed is barb.main._explain(), which now UNIFORMLY catches
+    all three (build + explain in one try) and DEGRADES loudly instead of
+    crashing (anthropic/openai) or silently substituting a template (ollama).
+    The two tests below still assert the class-level raise, which remains true;
+    the posture flip is asserted in the per-provider ErrorHandling classes and
+    at the CLI level in tests/test_llm_failure_posture.py.
     """
 
     def test_no_provider_in_barb_sends_temperature(self):
