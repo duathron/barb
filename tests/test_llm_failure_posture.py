@@ -148,8 +148,8 @@ class TestLoudDefaultRenderers:
 
 class TestCloudProviderFailureDoesNotCrash:
     def test_anthropic_api_failure_exits_4_no_uncaught_crash(self, _hermetic_config):
-        import anthropic
-        import httpx
+        anthropic = pytest.importorskip("anthropic")  # skip when the [llm] extra is absent (CI)
+        httpx = pytest.importorskip("httpx")
 
         _hermetic_config("explain:\n  provider: anthropic\n  api_key: fake-key\n")
         req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
@@ -172,8 +172,8 @@ class TestCloudProviderFailureDoesNotCrash:
         assert data["explanation_provider"] == "anthropic"
 
     def test_openai_api_failure_exits_4_no_uncaught_crash(self, _hermetic_config):
-        import httpx
-        import openai
+        httpx = pytest.importorskip("httpx")
+        openai = pytest.importorskip("openai")
 
         _hermetic_config("explain:\n  provider: openai\n  api_key: fake-key\n")
         req = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
