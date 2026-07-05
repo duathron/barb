@@ -27,7 +27,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "pyyaml>=6.0.1",
     "python-dotenv>=1.0.0",
-    "shipwright-kit>=0.10.1", # runtime: barb.config imports shipwright_kit.config; barb.explain.llm uses shipwright_kit.llm
+    "shipwright-kit>=0.12.0,<0.13.0", # runtime: barb.config imports shipwright_kit.config; barb.explain.llm uses shipwright_kit.llm
 ]
 
 [project.optional-dependencies]
