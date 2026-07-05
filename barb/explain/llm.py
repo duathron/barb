@@ -8,6 +8,7 @@ import urllib.error
 from shipwright_kit.llm import anthropic_complete, ollama_generate, openai_complete
 
 from ..models import AnalysisResult
+from .injection import PromptInjectionDetector
 from .prompt import SYSTEM_PROMPT, build_prompt
 
 
@@ -26,8 +27,14 @@ class AnthropicExplainer:
 
     def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
         """Generate an explanation using Anthropic Claude."""
-        signals_text = "\n".join(f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals)
-        defanged_url = result.defanged_url if send_url else None
+        _detector = PromptInjectionDetector()
+        signals_text = "\n".join(
+            f"  [{s.severity.value}] {s.analyzer}: {_detector.sanitize(s.detail, field_name='signal.detail')}"
+            for s in result.signals
+        )
+        defanged_url = (
+            _detector.sanitize(result.defanged_url, field_name="url", is_ioc_field=True) if send_url else None
+        )
         user_prompt = build_prompt(
             verdict=result.verdict.value,
             risk_score=result.risk_score,
@@ -60,8 +67,14 @@ class OpenAIExplainer:
 
     def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
         """Generate an explanation using OpenAI."""
-        signals_text = "\n".join(f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals)
-        defanged_url = result.defanged_url if send_url else None
+        _detector = PromptInjectionDetector()
+        signals_text = "\n".join(
+            f"  [{s.severity.value}] {s.analyzer}: {_detector.sanitize(s.detail, field_name='signal.detail')}"
+            for s in result.signals
+        )
+        defanged_url = (
+            _detector.sanitize(result.defanged_url, field_name="url", is_ioc_field=True) if send_url else None
+        )
         user_prompt = build_prompt(
             verdict=result.verdict.value,
             risk_score=result.risk_score,
@@ -94,8 +107,14 @@ class OllamaExplainer:
 
     def explain(self, result: AnalysisResult, send_url: bool = True) -> str:
         """Generate an explanation using the local Ollama server."""
-        signals_text = "\n".join(f"  [{s.severity.value}] {s.analyzer}: {s.detail}" for s in result.signals)
-        defanged_url = result.defanged_url if send_url else None
+        _detector = PromptInjectionDetector()
+        signals_text = "\n".join(
+            f"  [{s.severity.value}] {s.analyzer}: {_detector.sanitize(s.detail, field_name='signal.detail')}"
+            for s in result.signals
+        )
+        defanged_url = (
+            _detector.sanitize(result.defanged_url, field_name="url", is_ioc_field=True) if send_url else None
+        )
         user_prompt = build_prompt(
             verdict=result.verdict.value,
             risk_score=result.risk_score,
