@@ -5,6 +5,14 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0](https://github.com/duathron/barb/compare/v1.7.3...v1.8.0) (2026-07-05)
+
+
+### Features
+
+* escape LLM explanation at both render sinks (LLM05) ([#18](https://github.com/duathron/barb/issues/18)) ([d614709](https://github.com/duathron/barb/commit/d61470901adfdc9e0cdacde23449c0c7fde9e70f))
+* scan+redact attacker input before the explain prompt (LLM01) ([#17](https://github.com/duathron/barb/issues/17)) ([3815698](https://github.com/duathron/barb/commit/3815698c0a241afdad30f43b0097383c400e0f3a))
+
 ## [1.7.3](https://github.com/duathron/barb/compare/v1.7.2...v1.7.3) (2026-07-03)
 
 
