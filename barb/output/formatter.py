@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from shipwright_kit.security.render import safe_render
 
 from ..models import AnalysisResult, RiskVerdict, SignalSeverity
 
@@ -99,7 +100,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
         )
     elif result.explanation:
         console.print()
-        console.print(Panel(result.explanation, title="Explanation", border_style="dim"))
+        console.print(Panel(safe_render(result.explanation), title="Explanation", border_style="dim"))
 
     console.print()
 
@@ -127,7 +128,7 @@ def format_console(result: AnalysisResult, defang: bool = True) -> None:
     elif result.explanation:
         print()
         print("Explanation:")
-        print(result.explanation)
+        print(safe_render(result.explanation, escape_markup=False))
 
     print()
 
