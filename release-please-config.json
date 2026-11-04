@@ -15,6 +15,11 @@
         {
           "type": "generic",
           "path": "barb/__init__.py"
+        },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='barb-phish')].version"
         }
       ]
     }
