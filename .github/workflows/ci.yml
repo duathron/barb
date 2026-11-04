@@ -27,6 +27,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          enable-cache: false
       - run: uv sync --locked --dev
       - run: uv run python -m eval.run_eval --min-precision 1.0 --min-recall 0.70
 
@@ -40,5 +42,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          enable-cache: false
       - run: uv sync --locked --dev
       - run: uv run bash dogfood.sh   # BARB_DOGFOOD_OSINT unset → live skipped, exit 0
