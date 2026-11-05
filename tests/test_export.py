@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import uuid
 from datetime import datetime, timezone
+
+import pytest
 
 from barb.models import (
     AnalysisResult,
@@ -13,6 +17,7 @@ from barb.models import (
     Signal,
     SignalSeverity,
 )
+from barb.output import export
 from barb.output.export import to_csv, to_json, to_json_list, to_ndjson, to_stix
 
 
@@ -227,11 +232,44 @@ def test_to_stix_pattern_contains_real_url():
     assert obj["pattern"] == f"[url:value = '{url}']"
 
 
-def test_to_stix_pattern_escapes_single_quote():
-    url = "https://evil.tk/it's"
-    results = [_make_result_tz(url, RiskVerdict.PHISHING)]
-    obj = json.loads(to_stix(results))["objects"][0]
-    assert "it''s" in obj["pattern"]
+def _stix_pattern(url: str) -> str:
+    return json.loads(to_stix([_make_result_tz(url, RiskVerdict.PHISHING)]))["objects"][0]["pattern"]
+
+
+def test_stix_pattern_escapes_single_quote_with_backslash():
+    assert _stix_pattern("http://e.example/it's") == r"[url:value = 'http://e.example/it\'s']"
+
+
+def test_stix_pattern_escapes_backslash():
+    assert _stix_pattern("http://e.example/a\\b") == r"[url:value = 'http://e.example/a\\b']"
+
+
+def test_stix_pattern_injection_payload_is_one_literal():
+    url = "http://e.example/x'] OR [url:value = 'y"
+    assert _stix_pattern(url) == r"[url:value = 'http://e.example/x\'] OR [url:value = \'y']"
+
+
+_STIX_URLS = [
+    "http://e.example/it's",
+    "http://e.example/a\\b",
+    "http://e.example/x'] OR [url:value = 'y",
+    "http://e.example/trailing\\",
+]
+
+
+@pytest.mark.parametrize("url", _STIX_URLS)
+def test_stix_pattern_validates(url):
+    validator = pytest.importorskip("stix2patterns.validator")
+    assert validator.run_validator(_stix_pattern(url)) == []
+
+
+def test_stix_validator_rejects_the_old_doubled_quote_form():
+    """Vacuity guard: the validator must actually fail on the previous escaping."""
+    validator = pytest.importorskip("stix2patterns.validator")
+    old_form = "[url:value = '" + "http://e.example/it's".replace("'", "''") + "']"
+    assert validator.run_validator(old_form) != []
+    injected = "[url:value = '" + "http://e.example/x'] OR [url:value = 'y".replace("'", "''") + "']"
+    assert validator.run_validator(injected) != []
 
 
 def test_to_stix_deterministic_id():
@@ -269,3 +307,52 @@ def test_to_stix_mixed_verdicts_only_qualifying_included():
     bundle = json.loads(to_stix(results))
     assert len(bundle["objects"]) == 1
     assert "evil.tk" in bundle["objects"][0]["pattern"]
+
+
+# --- CSV formula neutralisation ------------------------------------------------
+
+
+def _csv_row(**fields) -> dict[str, str]:
+    result = _make_result(**{k: v for k, v in fields.items() if k in ("url",)})
+    if "defanged_url" in fields:
+        result = result.model_copy(update={"defanged_url": fields["defanged_url"]})
+    if "explanation" in fields:
+        result = result.model_copy(update={"explanation": fields["explanation"]})
+    rows = list(csv.DictReader(io.StringIO(to_csv([result]))))
+    assert len(rows) == 1
+    return rows[0]
+
+
+@pytest.mark.parametrize("lead", ["=", "+", "-", "@"])
+@pytest.mark.parametrize("column", ["url", "defanged_url", "explanation"])
+def test_csv_formula_cells_are_neutralized(lead, column):
+    original = f'{lead}HYPERLINK("http://x.example","c")'
+    cell = _csv_row(**{column: original})[column]
+    assert cell.startswith("'")
+    assert cell[1:] == original
+
+
+@pytest.mark.parametrize("lead", ["=", "+", "-", "@", "\t", "\r", "\n"])
+def test_csv_safe_prefixes_every_trigger_character(lead):
+    assert export._csv_safe(lead + "x") == "'" + lead + "x"
+
+
+def test_csv_empty_cells_unchanged():
+    assert export._csv_safe("") == ""
+    row = _csv_row()
+    assert row["explanation"] == ""
+
+
+def test_csv_plain_cells_unchanged():
+    row = _csv_row(url="https://example.com/a?b=c", explanation="Looks fine.")
+    assert row["url"] == "https://example.com/a?b=c"
+    assert row["explanation"] == "Looks fine."
+
+
+def test_csv_numeric_cells_not_prefixed():
+    signals = [Signal(analyzer="tld", severity=SignalSeverity.MEDIUM, label="Bad TLD", detail=".tk")]
+    result = _make_result(signals=signals, score=15.0, verdict=RiskVerdict.PHISHING)
+    row = next(csv.DictReader(io.StringIO(to_csv([result]))))
+    assert row["risk_score"] == "15.0"
+    assert row["signal_count"] == "1"
+    assert row["signals_summary"] == "MEDIUM:tld:Bad TLD"

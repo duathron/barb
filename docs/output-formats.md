@@ -220,6 +220,15 @@ Fixed column set: `url`, `defanged_url`, `verdict`, `risk_score`, `signal_count`
 
 Use `-o csv` for spreadsheet import or grep workflows.
 
+Text cells (`url`, `defanged_url`, `explanation`) are single-line and free of
+control characters. A cell that would start with `=`, `+`, `-` or `@` gets a
+leading `'` so a spreadsheet shows it as text instead of running it as a formula.
+
+> [!NOTE]
+> JSON, NDJSON and STIX output is ASCII-only: non-ASCII characters in a URL are
+> written as `\uXXXX` escapes (valid JSON, identical after parsing), so a hostile
+> URL cannot send terminal control sequences to your screen.
+
 ---
 
 ## stix (`-o stix`)

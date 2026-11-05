@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from ..models import AnalysisResult, RiskVerdict
+from .formatter import _plain_safe
 
 
 def _default(obj: Any) -> Any:
@@ -17,6 +18,21 @@ def _default(obj: Any) -> Any:
     if isinstance(obj, datetime):
         return obj.isoformat()
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
+def _csv_safe(s: str) -> str:
+    """Neutralise a spreadsheet formula trigger at the start of a text cell.
+
+    A cell beginning with ``= + - @`` (or tab / CR / LF) is evaluated as a
+    formula by Excel / LibreOffice / Sheets; a leading apostrophe makes it text.
+    Empty cells stay empty.
+    """
+    return "'" + s if s and s[0] in "=+-@\t\r\n" else s
+
+
+def _csv_cell(value: object) -> str:
+    """Single-line, control-character-free text cell, formula-neutralised."""
+    return _csv_safe(_plain_safe(value))
 
 
 def to_json(result: AnalysisResult, indent: int = 2, defang: bool = True) -> str:
@@ -28,7 +44,7 @@ def to_json(result: AnalysisResult, indent: int = 2, defang: bool = True) -> str
     data = result.model_dump(mode="json")
     if not defang:
         data["defanged_url"] = result.url
-    return json.dumps(data, indent=indent, default=_default, ensure_ascii=False)
+    return json.dumps(data, indent=indent, default=_default, ensure_ascii=True)
 
 
 def to_json_list(results: list[AnalysisResult], indent: int = 2, defang: bool = True) -> str:
@@ -41,7 +57,7 @@ def to_json_list(results: list[AnalysisResult], indent: int = 2, defang: bool = 
     if not defang:
         for item, result in zip(data, results):
             item["defanged_url"] = result.url
-    return json.dumps(data, indent=indent, default=_default, ensure_ascii=False)
+    return json.dumps(data, indent=indent, default=_default, ensure_ascii=True)
 
 
 def to_ndjson(results: list[AnalysisResult], defang: bool = True) -> str:
@@ -56,7 +72,7 @@ def to_ndjson(results: list[AnalysisResult], defang: bool = True) -> str:
         data = result.model_dump(mode="json")
         if not defang:
             data["defanged_url"] = result.url
-        lines.append(json.dumps(data, separators=(",", ":"), default=_default, ensure_ascii=False))
+        lines.append(json.dumps(data, separators=(",", ":"), default=_default, ensure_ascii=True))
     return "\n".join(lines) + "\n"
 
 
@@ -79,6 +95,11 @@ def to_stix(results: list[AnalysisResult]) -> str:
 
     URLs are never defanged in STIX output — the pattern field must contain
     the raw URL so that consumers can match it programmatically.
+
+    The pattern is a STIX 2.1 pattern string literal: backslash and single
+    quote are backslash-escaped.  Output is ASCII-only JSON, so non-ASCII and
+    control characters in an attacker URL become unicode escapes instead of
+    reaching the terminal raw.
     """
     objects: list[dict[str, Any]] = []
 
@@ -89,8 +110,9 @@ def to_stix(results: list[AnalysisResult]) -> str:
         indicator_id = "indicator--" + str(uuid.uuid5(uuid.NAMESPACE_URL, result.url))
         ts = result.analyzed_at.isoformat()
 
-        # Escape single quotes in the URL per STIX pattern string rules
-        escaped_url = result.url.replace("'", "''")
+        # STIX 2.1 pattern string literal: backslash and single quote are
+        # backslash-escaped (backslash first, or the escape would be doubled).
+        escaped_url = result.url.replace("\\", "\\\\").replace("'", "\\'")
         pattern = f"[url:value = '{escaped_url}']"
 
         # Truncate very long URLs in the human-readable name
@@ -130,7 +152,7 @@ def to_stix(results: list[AnalysisResult]) -> str:
         "id": "bundle--" + str(uuid.uuid4()),
         "objects": objects,
     }
-    return json.dumps(bundle, indent=2, ensure_ascii=False)
+    return json.dumps(bundle, indent=2, ensure_ascii=True)
 
 
 def to_csv(results: list[AnalysisResult]) -> str:
@@ -152,13 +174,13 @@ def to_csv(results: list[AnalysisResult]) -> str:
         signals_summary = "|".join(f"{s.severity.value}:{s.analyzer}:{s.label}" for s in r.signals)
         writer.writerow(
             {
-                "url": r.url,
-                "defanged_url": r.defanged_url,
+                "url": _csv_cell(r.url),
+                "defanged_url": _csv_cell(r.defanged_url),
                 "verdict": r.verdict.value,
                 "risk_score": f"{r.risk_score:.1f}",
                 "signal_count": len(r.signals),
-                "signals_summary": signals_summary,
-                "explanation": r.explanation or "",
+                "signals_summary": _plain_safe(signals_summary),
+                "explanation": _csv_cell(r.explanation or ""),
                 "analyzed_at": r.analyzed_at.isoformat(),
             }
         )
