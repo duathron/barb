@@ -6,6 +6,7 @@ from collections import Counter
 
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -41,6 +42,26 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+def _rich_safe(value: object) -> str:
+    """Neutralise attacker-controlled text for a Rich markup sink.
+
+    Control characters / bidi / tag characters are stripped by ``safe_render``;
+    Rich markup (``[/x]``, ``[link=...]``) is then escaped with
+    ``rich.markup.escape``. ``safe_render(escape_markup=True)`` is not used
+    because it doubles every backslash. Note: ``escape`` doubles a TRAILING
+    backslash by design (cosmetic, accepted).
+
+    Only attacker-derived values go through here; the trusted UI markup
+    (``_VERDICT_ICON`` etc.) must never be passed through it.
+    """
+    return escape(safe_render(value, escape_markup=False))
+
+
+def _plain_safe(value: object) -> str:
+    """Neutralise attacker-controlled text for a plain-text sink."""
+    return safe_render(value, escape_markup=False)
+
+
 def format_rich(result: AnalysisResult, defang: bool = True) -> None:
     """Print a single analysis result as a Rich panel with signal table."""
     url_display = result.defanged_url if defang else result.url
@@ -50,7 +71,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
     grid.add_column(style="bold cyan", no_wrap=True)
     grid.add_column()
 
-    grid.add_row("URL", url_display)
+    grid.add_row("URL", _rich_safe(url_display))
     grid.add_row("Verdict", _VERDICT_ICON.get(result.verdict, result.verdict.value))
     grid.add_row("Risk Score", f"[bold]{result.risk_score:.1f}[/bold]")
 
@@ -76,8 +97,8 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
             sev_style = _SEVERITY_STYLE.get(signal.severity, "white")
             sig_table.add_row(
                 Text(signal.severity.value, style=sev_style),
-                signal.analyzer,
-                signal.detail,
+                _rich_safe(signal.analyzer),
+                _rich_safe(signal.detail),
             )
         console.print(sig_table)
     elif result.signals and result.verdict == RiskVerdict.SAFE:
@@ -92,7 +113,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
         console.print(
             Panel(
                 f"[bold red]⚠ EXPLANATION UNAVAILABLE[/bold red] — provider "
-                f"'{result.explanation_provider}' failed. The verdict above is unaffected; "
+                f"'{_rich_safe(result.explanation_provider)}' failed. The verdict above is unaffected; "
                 "no explanation was generated.",
                 title="Explanation",
                 border_style="red",
@@ -100,7 +121,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
         )
     elif result.explanation:
         console.print()
-        console.print(Panel(safe_render(result.explanation), title="Explanation", border_style="dim"))
+        console.print(Panel(_rich_safe(result.explanation), title="Explanation", border_style="dim"))
 
     console.print()
 
@@ -109,26 +130,26 @@ def format_console(result: AnalysisResult, defang: bool = True) -> None:
     """Print a single analysis result as plain text (no Rich markup)."""
     url_display = result.defanged_url if defang else result.url
 
-    print(f"URL:      {url_display}")
+    print(f"URL:      {_plain_safe(url_display)}")
     print(f"Verdict:  {result.verdict.value}")
     print(f"Score:    {result.risk_score:.1f}")
 
     if result.signals:
         print("Signals:")
         for signal in sorted(result.signals, key=lambda s: s.severity.points, reverse=True):
-            print(f"  [{signal.severity.value:8s}] {signal.analyzer:12s} {signal.detail}")
+            print(f"  [{signal.severity.value:8s}] {_plain_safe(signal.analyzer):12s} {_plain_safe(signal.detail)}")
 
     # F2 cut-1 (2026-07-03 MeetUp): loud degraded banner, never a silent template.
     if result.explanation_degraded:
         print()
         print(
-            f"⚠ EXPLANATION UNAVAILABLE — provider '{result.explanation_provider}' failed. "
+            f"⚠ EXPLANATION UNAVAILABLE — provider '{_plain_safe(result.explanation_provider)}' failed. "
             "The verdict above is unaffected; no explanation was generated."
         )
     elif result.explanation:
         print()
         print("Explanation:")
-        print(safe_render(result.explanation, escape_markup=False))
+        print(_plain_safe(result.explanation))
 
     print()
 
@@ -146,7 +167,7 @@ def format_batch_summary(results: list[AnalysisResult]) -> None:
         verdict_display = _VERDICT_ICON.get(result.verdict, result.verdict.value)
         table.add_row(
             str(i),
-            result.defanged_url[:50],
+            _rich_safe(result.defanged_url[:50]),
             verdict_display,
             f"{result.risk_score:.1f}",
             str(len(result.signals)),
@@ -219,7 +240,7 @@ def format_aggregate_summary(
         sig_table.add_column("URLs affected", justify="right", width=14)
 
         for label, count in signal_counts.most_common(top_n):
-            sig_table.add_row(label, str(count))
+            sig_table.add_row(_rich_safe(label), str(count))
 
         console.print(sig_table)
         console.print()
@@ -263,6 +284,6 @@ def format_console_aggregate_summary(
         top_n = min(5, len(signal_counts))
         print("Top signals:")
         for label, count in signal_counts.most_common(top_n):
-            print(f"  {count:3d}x  {label}")
+            print(f"  {count:3d}x  {_plain_safe(label)}")
 
     print()

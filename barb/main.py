@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
+from shipwright_kit.security.render import safe_render
 
 from barb import __version__
 from barb.banner import show_banner
@@ -267,7 +268,7 @@ def _explain(result: AnalysisResult, config: AppConfig) -> None:
             result.explanation = explainer.explain(result, send_url=config.explain.send_url)
     except Exception as exc:  # noqa: BLE001 — any provider failure degrades, never crashes
         typer.echo(
-            f"⚠ EXPLANATION UNAVAILABLE — provider '{provider}' failed: {exc}",
+            f"⚠ EXPLANATION UNAVAILABLE — provider '{provider}' failed: {safe_render(str(exc), escape_markup=False)}",
             err=True,
         )
         result.explanation = None
@@ -374,7 +375,7 @@ def analyze(
         try:
             results = [_analyze_single(all_urls[0], config, explain=explain, osint=osint, use_cache=not no_cache)]
         except ValueError as exc:
-            typer.echo(f"Error: {exc}", err=True)
+            typer.echo(f"Error: {safe_render(str(exc), escape_markup=False)}", err=True)
             raise typer.Exit(3) from None
     else:
         valid_results: list[AnalysisResult] = []
@@ -383,7 +384,8 @@ def analyze(
             try:
                 valid_results.append(_analyze_single(url, config, explain=explain, osint=osint, use_cache=not no_cache))
             except ValueError as exc:
-                typer.echo(f"Error ({url[:80]}): {exc}", err=True)
+                label = safe_render(url[:80], escape_markup=False)
+                typer.echo(f"Error ({label}): {safe_render(str(exc), escape_markup=False)}", err=True)
                 errors += 1
         results = valid_results
         if not results:
