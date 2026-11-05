@@ -115,9 +115,13 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_config(config_path: Optional[Path] = None) -> AppConfig:
-    """Load configuration from YAML file with env var overrides."""
+    """Load configuration from YAML file with env var overrides.
+
+    The current working directory is deliberately not searched: a stray
+    ``./config.yaml`` (e.g. in a downloaded repo) must not change verdicts.
+    """
     config = _resolve_config(
-        [config_path, _APP_DIR / "config.yaml", Path("config.yaml")],
+        [config_path, _APP_DIR / "config.yaml"],
         loader=_load_yaml,
         validator=lambda data: AppConfig(**data),
     )

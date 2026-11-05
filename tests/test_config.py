@@ -52,13 +52,45 @@ def test_user_config_used(tmp_path, monkeypatch):
     assert load_config().output.default_format == "json"
 
 
-def test_cwd_config_fallback(tmp_path, monkeypatch):
-    """With no explicit path and no ~/.barb/config.yaml, ./config.yaml is used."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    # Point _APP_DIR at a dir with no config.yaml so the cwd file is the fallback.
-    monkeypatch.setattr(barb.config, "_APP_DIR", tmp_path / ".barb")
-    (tmp_path / "config.yaml").write_text("output:\n  default_format: json\n")
+def test_cwd_config_is_ignored(tmp_path, monkeypatch):
+    """A ./config.yaml in the working directory must never influence the config."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    (cwd / "config.yaml").write_text(
+        textwrap.dedent(
+            """\
+            output:
+              default_format: json
+            explain:
+              ollama_host: http://attacker.example:11434
+            scoring:
+              thresholds:
+                phishing: 99
+            """
+        )
+    )
+    monkeypatch.chdir(cwd)
+    empty_app = tmp_path / "app"
+    empty_app.mkdir()
+    monkeypatch.setattr(barb.config, "_APP_DIR", empty_app)
+
+    cfg = load_config()
+
+    assert cfg.output.default_format == "rich"
+    assert cfg.explain.ollama_host == "http://localhost:11434"
+    assert cfg.scoring.thresholds.phishing == 13
+
+
+def test_user_config_precedes_nothing_in_cwd(tmp_path, monkeypatch):
+    """With both a user config and a CWD file present, only the user file counts."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    (cwd / "config.yaml").write_text("output:\n  default_format: console\n")
+    appdir = tmp_path / "app"
+    appdir.mkdir()
+    (appdir / "config.yaml").write_text("output:\n  default_format: json\n")
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(barb.config, "_APP_DIR", appdir)
 
     assert load_config().output.default_format == "json"
 
@@ -71,3 +103,79 @@ def test_env_override(tmp_path, monkeypatch):
     monkeypatch.setattr(barb.config, "_APP_DIR", tmp_path / ".barb")
 
     assert load_config().explain.api_key == "sekret"
+
+
+_PHISH = "http://paypal.secure-login.verify-account.update.xyz/login/account/verify.exe.zip"
+
+
+def _cli_env(tmp_path, monkeypatch):
+    """Isolated HOME/app dir for CLI tests; returns the app dir."""
+    appdir = tmp_path / "app"
+    appdir.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setattr(barb.config, "_APP_DIR", appdir)
+    monkeypatch.delenv("BARB_LLM_KEY", raising=False)
+    return appdir
+
+
+def test_analyze_ignores_cwd_config(tmp_path, monkeypatch):
+    """A threshold-99 config.yaml in the CWD must not downgrade a phishing verdict."""
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    _cli_env(tmp_path, monkeypatch)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    (cwd / "config.yaml").write_text(
+        "scoring:\n  thresholds:\n    phishing: 99\n    high_risk: 99\n    suspicious: 99\n"
+    )
+    monkeypatch.chdir(cwd)
+
+    res = CliRunner().invoke(app, ["analyze", _PHISH, "-o", "json", "-q"])
+
+    assert res.exit_code == 2, res.output
+    assert "PHISHING" in res.output
+
+
+def test_config_show_masks_api_key_from_env(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    _cli_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("BARB_LLM_KEY", "sk-SECRET123")
+
+    res = CliRunner().invoke(app, ["config", "--show"])
+
+    assert res.exit_code == 0
+    assert "sk-SECRET123" not in res.output
+    assert "api_key: '***'" in res.output
+
+
+def test_config_show_masks_api_key_from_file(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    appdir = _cli_env(tmp_path, monkeypatch)
+    (appdir / "config.yaml").write_text("explain:\n  api_key: sk-FILESECRET456\n")
+
+    res = CliRunner().invoke(app, ["config", "--show"])
+
+    assert res.exit_code == 0
+    assert "sk-FILESECRET456" not in res.output
+    assert "api_key: '***'" in res.output
+
+
+def test_config_show_unset_key_stays_null(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    _cli_env(tmp_path, monkeypatch)
+
+    res = CliRunner().invoke(app, ["config", "--show"])
+
+    assert res.exit_code == 0
+    assert "api_key: null" in res.output

@@ -489,7 +489,10 @@ def config(
         cfg = load_config()
         import yaml
 
-        typer.echo(yaml.dump(cfg.model_dump(), default_flow_style=False, sort_keys=False))
+        data = cfg.model_dump()
+        if data["explain"]["api_key"]:
+            data["explain"]["api_key"] = "***"
+        typer.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
     else:
         typer.echo("Use --show to display current configuration.")
         typer.echo("Config file: ~/.barb/config.yaml")
