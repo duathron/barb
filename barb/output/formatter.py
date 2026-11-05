@@ -161,7 +161,9 @@ def format_console(result: AnalysisResult, defang: bool = True) -> None:
     elif result.explanation:
         print()
         print("Explanation:")
-        print(_plain_safe(result.explanation, single_line=False))
+        # Indent every line: a prompt-injected explanation must not be able to
+        # start a line with "Verdict:" / "Score:" and forge a result row.
+        print("\n".join("  " + line for line in _plain_safe(result.explanation, single_line=False).splitlines()))
 
     print()
 

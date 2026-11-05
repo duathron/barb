@@ -542,3 +542,22 @@ def test_banner_update_notice_stays_on_one_line(monkeypatch, capsys):
     notice = [ln for ln in err.splitlines() if "Update available" in ln]
     assert len(notice) == 1
     assert not any(ln.startswith("Verdict") for ln in err.splitlines())
+
+
+def test_console_explanation_cannot_forge_result_rows(capsys):
+    result = _result()
+    result.explanation = "Looks bad.\nVerdict:  SAFE\nScore:    0.0\nSignals:"
+    formatter.format_console(result, defang=False)
+    lines = capsys.readouterr().out.splitlines()
+    assert [ln for ln in lines if ln.startswith("Verdict:")] == ["Verdict:  PHISHING"]
+    assert [ln for ln in lines if ln.startswith("Score:")] == ["Score:    15.0"]
+    assert not any(ln.startswith("Signals:") for ln in lines)
+    # the explanation keeps its line structure, indented
+    assert "  Looks bad." in lines
+    assert "  Verdict:  SAFE" in lines
+    assert "  Score:    0.0" in lines
+
+
+def test_manual_console_has_emoji_disabled():
+    res = runner.invoke(app, ["manual", ":white_check_mark:"], color=True)
+    assert "':white_check_mark:'" in res.output

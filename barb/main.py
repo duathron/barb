@@ -591,7 +591,7 @@ def manual(
     """Display built-in usage guide. Omit TOPIC for the overview."""
     from rich.console import Console
 
-    console = Console()
+    console = Console(emoji=False)
 
     if topic and topic.lower() in _MANUAL_TOPICS:
         console.print(_MANUAL_TOPICS[topic.lower()])
