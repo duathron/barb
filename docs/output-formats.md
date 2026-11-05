@@ -91,6 +91,13 @@ Signals:
 Pretty-printed JSON array (2-space indent), one object per URL. The complete
 `AnalysisResult` structure including the `parsed_url` decomposition.
 
+> [!NOTE]
+> JSON, NDJSON and STIX output is ASCII-only: every non-ASCII character in a
+> value is written as a `\uXXXX` escape. This is valid JSON and identical after
+> parsing, but raw text matching on non-ASCII characters no longer works; parse
+> the JSON instead. A hostile URL therefore cannot send terminal control
+> sequences to your screen.
+
 ```bash
 barb analyze "http://paypal.com@evil-login.tk/verify" "https://bit.ly/3abc123" -o json -q
 ```
@@ -219,6 +226,12 @@ Fixed column set: `url`, `defanged_url`, `verdict`, `risk_score`, `signal_count`
 `signals_summary`, `explanation`, `analyzed_at`.
 
 Use `-o csv` for spreadsheet import or grep workflows.
+
+Line breaks and tabs in text cells (`url`, `defanged_url`, `explanation`,
+`signals_summary`) are replaced by a space; control characters are removed. Use
+JSON for faithful values. A cell that would start with `=`, `+`, `-` or `@`
+(also after leading spaces) gets a leading `'` so a spreadsheet shows it as text
+instead of running it as a formula.
 
 ---
 
