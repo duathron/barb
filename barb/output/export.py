@@ -23,11 +23,15 @@ def _default(obj: Any) -> Any:
 def _csv_safe(s: str) -> str:
     """Neutralise a spreadsheet formula trigger at the start of a text cell.
 
-    A cell beginning with ``= + - @`` (or tab / CR / LF) is evaluated as a
+    A cell beginning with ``= + - @`` (or tab / CR / LF), also after leading whitespace, is evaluated as a
     formula by Excel / LibreOffice / Sheets; a leading apostrophe makes it text.
     Empty cells stay empty.
     """
-    return "'" + s if s and s[0] in "=+-@\t\r\n" else s
+    if not s:
+        return s
+    if s[0] in "=+-@\t\r\n" or s.lstrip()[:1] in ("=", "+", "-", "@"):
+        return "'" + s
+    return s
 
 
 def _csv_cell(value: object) -> str:

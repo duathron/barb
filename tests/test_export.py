@@ -332,6 +332,9 @@ def test_csv_formula_cells_are_neutralized(lead, column):
     assert cell[1:] == original
 
 
+# Unit-level only: tab/CR/LF leads are collapsed by the single-line rule before
+# _csv_safe runs, so they are unreachable through to_csv (end-to-end whitespace
+# cases are covered by test_csv_formula_after_leading_whitespace_is_neutralized).
 @pytest.mark.parametrize("lead", ["=", "+", "-", "@", "\t", "\r", "\n"])
 def test_csv_safe_prefixes_every_trigger_character(lead):
     assert export._csv_safe(lead + "x") == "'" + lead + "x"
@@ -356,3 +359,12 @@ def test_csv_numeric_cells_not_prefixed():
     assert row["risk_score"] == "15.0"
     assert row["signal_count"] == "1"
     assert row["signals_summary"] == "MEDIUM:tld:Bad TLD"
+
+
+@pytest.mark.parametrize("prefix", [" ", "\t", "\n", "  "])
+@pytest.mark.parametrize("trigger", ["=x", "@x"])
+@pytest.mark.parametrize("column", ["url", "defanged_url", "explanation"])
+def test_csv_formula_after_leading_whitespace_is_neutralized(prefix, trigger, column):
+    cell = _csv_row(**{column: prefix + trigger})[column]
+    assert cell.startswith("'")
+    assert cell.lstrip("'").strip() == trigger

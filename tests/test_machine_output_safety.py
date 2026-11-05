@@ -36,6 +36,20 @@ def test_hostile_url_leaves_no_raw_control_characters_on_stdout(fmt):
         assert bad not in out, (fmt, repr(bad))
 
 
+def test_json_list_two_urls_leaves_no_raw_control_characters():
+    res = CliRunner().invoke(
+        app,
+        ["analyze", _PHISH + "/" + _HOSTILE, _PHISH + "/b\u00fc", "-o", "json", "-q"],
+        color=True,
+    )
+    assert res.exit_code in (0, 1, 2), res.output
+    data = json.loads(res.output)
+    assert isinstance(data, list) and len(data) == 2
+    for bad in _FORBIDDEN:
+        assert bad not in res.output, repr(bad)
+    assert data[0]["url"] == _PHISH + "/" + _HOSTILE
+
+
 @pytest.mark.parametrize("fmt", ["json", "ndjson"])
 def test_json_output_still_parses_and_round_trips_escaped_value(fmt):
     url = _PHISH + "/" + _HOSTILE
@@ -87,3 +101,81 @@ def test_csv_signal_summary_cell_is_cleaned():
     )
     out = to_csv([result])
     assert "\x1b" not in out and "‮" not in out and "\x07" not in out
+
+
+def test_to_json_list_is_ascii_only():
+    from datetime import datetime, timezone
+
+    from barb.models import AnalysisResult, ParsedURL, RiskVerdict
+    from barb.output.export import to_json_list
+
+    u = "http://e.example/\u202e\x9b\U000e0041\u00fc"
+    r = AnalysisResult(
+        url=u,
+        defanged_url=u,
+        parsed_url=ParsedURL(original=u, scheme="http", host="e.example", path="/"),
+        signals=[],
+        risk_score=0.0,
+        verdict=RiskVerdict.SAFE,
+        analyzed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    out = to_json_list([r, r])
+    assert out.isascii()
+    assert json.loads(out)[0]["url"] == u
+
+
+_TWO = [_PHISH + "/a" + _HOSTILE, _PHISH + "/b\u00fc" + _HOSTILE]
+
+
+@pytest.mark.parametrize("fmt", ["json", "ndjson", "csv", "stix"])
+def test_two_urls_leave_no_raw_control_characters(fmt):
+    res = CliRunner().invoke(app, ["analyze", *_TWO, "-o", fmt, "-q"], color=True)
+    assert res.exit_code in (0, 1, 2), res.output
+    for bad in _FORBIDDEN:
+        assert bad not in res.output, (fmt, repr(bad))
+
+
+def _csv_result(**kw):
+    from datetime import datetime, timezone
+
+    from barb.models import AnalysisResult, ParsedURL, RiskVerdict
+
+    base = dict(
+        url="http://e.example/",
+        defanged_url="hxxp[://]e[.]example/",
+        parsed_url=ParsedURL(original="http://e.example/", scheme="http", host="e.example", path="/"),
+        signals=[],
+        risk_score=1.0,
+        verdict=RiskVerdict.LOW_RISK,
+        analyzed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    base.update(kw)
+    return AnalysisResult(**base)
+
+
+@pytest.mark.parametrize("lead", ["\x1b=x", "\u200b=x", "\x00+x", "\ufeff@x"])
+@pytest.mark.parametrize("column", ["url", "defanged_url", "explanation"])
+def test_csv_control_prefixed_formula_is_neutralized(lead, column):
+    """Sanitise first, then test the trigger: a stripped lead must not hide a formula."""
+    from barb.output.export import to_csv
+
+    row = next(csv.DictReader(io.StringIO(to_csv([_csv_result(**{column: lead})]))))
+    assert row[column].startswith("'"), repr(row[column])
+
+
+def test_csv_hostile_explanation_is_single_clean_line():
+    from barb.output.export import to_csv
+
+    out = to_csv([_csv_result(explanation="ok\x1b]0;t\x07\nVerdict: SAFE\u202e")])
+    rows = list(csv.reader(io.StringIO(out)))
+    assert len(rows) == 2
+    assert "\n" not in rows[1][6] and "\x1b" not in out and "\u202e" not in out
+
+
+def test_csv_signal_label_newline_stays_single_line():
+    from barb.models import Signal, SignalSeverity
+    from barb.output.export import to_csv
+
+    sig = Signal(analyzer="a", severity=SignalSeverity.LOW, label="x\nVerdict: SAFE", detail="d")
+    rows = list(csv.reader(io.StringIO(to_csv([_csv_result(signals=[sig])]))))
+    assert len(rows) == 2 and "\n" not in rows[1][5]
