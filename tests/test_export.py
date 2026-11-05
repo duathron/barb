@@ -361,7 +361,7 @@ def test_csv_numeric_cells_not_prefixed():
     assert row["signals_summary"] == "MEDIUM:tld:Bad TLD"
 
 
-@pytest.mark.parametrize("prefix", [" ", "\t", "\n", "  "])
+@pytest.mark.parametrize("prefix", [" ", "\t", "\n", "  ", "\xa0", "\u3000"])
 @pytest.mark.parametrize("trigger", ["=x", "@x"])
 @pytest.mark.parametrize("column", ["url", "defanged_url", "explanation"])
 def test_csv_formula_after_leading_whitespace_is_neutralized(prefix, trigger, column):
