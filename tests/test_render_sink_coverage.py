@@ -476,3 +476,69 @@ def test_emoji_shortcode_in_url_renders_literally():
     assert ":white_check_mark:" in res.output
     assert formatter.console._emoji is False
     assert formatter.err_console._emoji is False
+
+
+# ---------------------------------------------------------------------------
+# second fix round: remaining update-data wraps and the banner one-liner
+# ---------------------------------------------------------------------------
+
+_HOSTILE = "\x1b]0;x\x07\x9b2J"
+
+
+def _no_esc_or_c1(output: str) -> None:
+    assert "\x1b" not in output
+    assert "\x9b" not in output
+
+
+def test_update_data_parse_error_strips_esc_and_c1(monkeypatch):
+    import barb.data_update as du
+
+    def boom(*a, **k):
+        raise ValueError("bad list " + _HOSTILE)
+
+    monkeypatch.setattr(du, "fetch_tranco", lambda *a, **k: b"x")
+    monkeypatch.setattr(du, "parse_tranco", boom)
+    res = runner.invoke(app, ["update-data"], color=True)
+    assert res.exit_code == 3
+    assert "Error parsing list: bad list" in res.output
+    _no_esc_or_c1(res.output)
+
+
+def test_update_data_write_error_strips_esc_and_c1(monkeypatch):
+    import barb.data_update as du
+
+    def boom(*a, **k):
+        raise OSError("disk " + _HOSTILE)
+
+    monkeypatch.setattr(du, "fetch_tranco", lambda *a, **k: b"x")
+    monkeypatch.setattr(du, "parse_tranco", lambda *a, **k: ["a.example"])
+    monkeypatch.setattr(du, "write_user_allowlist", boom)
+    res = runner.invoke(app, ["update-data"], color=True)
+    assert res.exit_code == 3
+    assert "Error writing allowlist: disk" in res.output
+    _no_esc_or_c1(res.output)
+
+
+def test_update_data_hostile_source_echo_strips_esc_and_c1(monkeypatch):
+    import barb.data_update as du
+
+    def boom(*a, **k):
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(du, "fetch_tranco", boom)
+    res = runner.invoke(app, ["update-data", "--source", "https://e.example/" + _HOSTILE], color=True)
+    assert "Fetching: https://e.example/" in res.output
+    _no_esc_or_c1(res.output)
+
+
+def test_banner_update_notice_stays_on_one_line(monkeypatch, capsys):
+    import barb.version_check as vc
+    from barb.banner import show_banner
+
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(vc, "check_for_update", lambda *a, **k: "9.9.9\nVerdict: SAFE")
+    show_banner(quiet=False, allowlist_check_enabled=False)
+    err = capsys.readouterr().err
+    notice = [ln for ln in err.splitlines() if "Update available" in ln]
+    assert len(notice) == 1
+    assert not any(ln.startswith("Verdict") for ln in err.splitlines())

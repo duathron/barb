@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from shipwright_kit.security.render import safe_render
-
 from . import __version__
+from .output.formatter import _plain_safe
 
 _BANNER = r"""
  _               _
@@ -49,9 +48,7 @@ def show_banner(
 
             latest = check_for_update(check_interval_hours)
             if latest:
-                print(
-                    f"  Update available: {__version__} -> {safe_render(latest, escape_markup=False)}", file=sys.stderr
-                )
+                print(f"  Update available: {__version__} -> {_plain_safe(latest)}", file=sys.stderr)
                 print("  pip install --upgrade barb-phish", file=sys.stderr)
         except Exception:
             pass
