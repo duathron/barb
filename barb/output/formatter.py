@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from rich import box
@@ -38,28 +39,39 @@ _SEVERITY_STYLE = {
     SignalSeverity.CRITICAL: "bold red",
 }
 
-console = Console()
-err_console = Console(stderr=True)
+# emoji=False: ``:shortcode:`` text in an attacker URL must not become a glyph.
+# The trusted UI markup uses literal glyphs only.
+console = Console(emoji=False)
+err_console = Console(stderr=True, emoji=False)
 
 
-def _rich_safe(value: object) -> str:
+_LINE_BREAKS = re.compile(r"[\r\n\t\x0b\x0c\x85\u2028\u2029]")
+
+
+def _collapse(value: object, single_line: bool) -> str:
+    text = "" if value is None else str(value)
+    return _LINE_BREAKS.sub(" ", text) if single_line else text
+
+
+def _rich_safe(value: object, *, single_line: bool = True) -> str:
     """Neutralise attacker-controlled text for a Rich markup sink.
 
-    Control characters / bidi / tag characters are stripped by ``safe_render``;
-    Rich markup (``[/x]``, ``[link=...]``) is then escaped with
-    ``rich.markup.escape``. ``safe_render(escape_markup=True)`` is not used
-    because it doubles every backslash. Note: ``escape`` doubles a TRAILING
-    backslash by design (cosmetic, accepted).
+    Line breaks and tabs become one space first (log/verdict-row forging,
+    CWE-117) unless ``single_line=False`` (multi-line explanation). Control,
+    bidi and tag characters are then stripped by ``safe_render`` and Rich markup
+    (``[/x]``, ``[link=...]``) is escaped with ``rich.markup.escape``.
+    ``safe_render(escape_markup=True)`` is not used because it doubles every
+    backslash. ``escape`` doubles a TRAILING backslash by design (cosmetic).
 
     Only attacker-derived values go through here; the trusted UI markup
     (``_VERDICT_ICON`` etc.) must never be passed through it.
     """
-    return escape(safe_render(value, escape_markup=False))
+    return escape(safe_render(_collapse(value, single_line), escape_markup=False))
 
 
-def _plain_safe(value: object) -> str:
+def _plain_safe(value: object, *, single_line: bool = True) -> str:
     """Neutralise attacker-controlled text for a plain-text sink."""
-    return safe_render(value, escape_markup=False)
+    return safe_render(_collapse(value, single_line), escape_markup=False)
 
 
 def format_rich(result: AnalysisResult, defang: bool = True) -> None:
@@ -121,7 +133,7 @@ def format_rich(result: AnalysisResult, defang: bool = True) -> None:
         )
     elif result.explanation:
         console.print()
-        console.print(Panel(_rich_safe(result.explanation), title="Explanation", border_style="dim"))
+        console.print(Panel(_rich_safe(result.explanation, single_line=False), title="Explanation", border_style="dim"))
 
     console.print()
 
@@ -149,7 +161,7 @@ def format_console(result: AnalysisResult, defang: bool = True) -> None:
     elif result.explanation:
         print()
         print("Explanation:")
-        print(_plain_safe(result.explanation))
+        print(_plain_safe(result.explanation, single_line=False))
 
     print()
 

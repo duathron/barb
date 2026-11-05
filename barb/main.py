@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from shipwright_kit.security.render import safe_render
 
 from barb import __version__
 from barb.banner import show_banner
@@ -16,6 +15,7 @@ from barb.config import AppConfig, load_config
 from barb.defang import defang_url, refang_url
 from barb.help import _MANUAL_TOPICS
 from barb.models import AnalysisResult
+from barb.output.formatter import _plain_safe, _rich_safe
 from barb.scoring import compute_risk_score, determine_verdict
 from barb.url_parser import parse_url
 
@@ -268,7 +268,7 @@ def _explain(result: AnalysisResult, config: AppConfig) -> None:
             result.explanation = explainer.explain(result, send_url=config.explain.send_url)
     except Exception as exc:  # noqa: BLE001 — any provider failure degrades, never crashes
         typer.echo(
-            f"⚠ EXPLANATION UNAVAILABLE — provider '{provider}' failed: {safe_render(str(exc), escape_markup=False)}",
+            f"⚠ EXPLANATION UNAVAILABLE — provider '{provider}' failed: {_plain_safe(exc)}",
             err=True,
         )
         result.explanation = None
@@ -354,7 +354,7 @@ def analyze(
         all_urls.extend(urls)
     if file:
         if not file.exists():
-            typer.echo(f"Error: File not found: {file}", err=True)
+            typer.echo(f"Error: File not found: {_plain_safe(file)}", err=True)
             raise typer.Exit(3)
         text = file.read_text()
         all_urls.extend(line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#"))
@@ -375,7 +375,7 @@ def analyze(
         try:
             results = [_analyze_single(all_urls[0], config, explain=explain, osint=osint, use_cache=not no_cache)]
         except ValueError as exc:
-            typer.echo(f"Error: {safe_render(str(exc), escape_markup=False)}", err=True)
+            typer.echo(f"Error: {_plain_safe(exc)}", err=True)
             raise typer.Exit(3) from None
     else:
         valid_results: list[AnalysisResult] = []
@@ -384,8 +384,8 @@ def analyze(
             try:
                 valid_results.append(_analyze_single(url, config, explain=explain, osint=osint, use_cache=not no_cache))
             except ValueError as exc:
-                label = safe_render(url[:80], escape_markup=False)
-                typer.echo(f"Error ({label}): {safe_render(str(exc), escape_markup=False)}", err=True)
+                label = _plain_safe(url[:80])
+                typer.echo(f"Error ({label}): {_plain_safe(exc)}", err=True)
                 errors += 1
         results = valid_results
         if not results:
@@ -544,12 +544,12 @@ def update_data(
         )
 
     if not quiet:
-        typer.echo(f"Fetching: {source}")
+        typer.echo(f"Fetching: {_plain_safe(source)}")
 
     try:
         raw = fetch_tranco(source)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        typer.echo(f"Error: {_plain_safe(exc)}", err=True)
         raise typer.Exit(3)
 
     if not quiet:
@@ -558,13 +558,13 @@ def update_data(
     try:
         domains = parse_tranco(raw, top_n)
     except Exception as exc:
-        typer.echo(f"Error parsing list: {exc}", err=True)
+        typer.echo(f"Error parsing list: {_plain_safe(exc)}", err=True)
         raise typer.Exit(3)
 
     try:
         dest = write_user_allowlist(domains)
     except Exception as exc:
-        typer.echo(f"Error writing allowlist: {exc}", err=True)
+        typer.echo(f"Error writing allowlist: {_plain_safe(exc)}", err=True)
         raise typer.Exit(3)
 
     # Count total entries in the written file
@@ -598,7 +598,7 @@ def manual(
         return
 
     if topic:
-        console.print(f"[red]Unknown topic:[/red] '{topic}'")
+        console.print(f"[red]Unknown topic:[/red] '{_rich_safe(topic)}'")
         console.print()
 
     # Overview

@@ -206,6 +206,8 @@ _PAIRS = [
     ("format_console", "signal.detail", False),
     ("format_console", "signal.analyzer", True),
     ("format_console", "signal.analyzer", False),
+    ("format_rich", "explanation_provider", True),
+    ("format_console", "explanation_provider", True),
     ("format_batch_summary", "defanged_url", None),
     ("format_aggregate_summary", "signal.analyzer", None),
     ("format_aggregate_summary", "signal.label", None),
@@ -223,6 +225,11 @@ def _build(field: str, payload: str) -> AnalysisResult:
         return _result(signals=[_signal(detail=payload)])
     if field == "signal.analyzer":
         return _result(signals=[_signal(analyzer="a" + payload)])
+    if field == "explanation_provider":
+        r = _result()
+        r.explanation_degraded = True
+        r.explanation_provider = payload
+        return r
     if field == "signal.label":
         return _result(signals=[_signal(label=payload)])
     raise AssertionError(field)
@@ -360,3 +367,112 @@ def test_classification_guard_detects_a_new_str_field():
     # an enum (str subclass) field is not.
     Widened = create_model("Signal", __base__=Signal, extra_text=(str, ""), extra_opt=(typing.Optional[str], None))
     assert _unclassified_str_fields([Widened]) == ["Signal.extra_text", "Signal.extra_opt"]
+
+
+# ---------------------------------------------------------------------------
+# fix round: provider sinks, update-data/file/manual echoes, newline forging, emoji
+# ---------------------------------------------------------------------------
+
+
+def _degraded(provider: str) -> AnalysisResult:
+    r = _result()
+    r.explanation_degraded = True
+    r.explanation_provider = provider
+    return r
+
+
+def test_degraded_provider_cannot_inject_at_rich_or_plain_sink(monkeypatch, capsys):
+    hostile = "x\x1b]0;t\x07[link=http://a]b[/link]"
+    rec, buf = _rich_capture(monkeypatch, terminal=True)
+    formatter.format_rich(_degraded(hostile), defang=False)
+    assert "\x1b]8;" not in buf.getvalue()
+    assert "\x1b]0;" not in buf.getvalue()
+    assert "[link=http://a]b[/link]" in rec.export_text()
+    formatter.format_console(_degraded(hostile), defang=False)
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert "[link=http://a]b[/link]" in out
+
+
+def test_update_data_error_echoes_strip_esc_and_c1(monkeypatch):
+    import barb.data_update as du
+
+    def boom(*a, **k):
+        raise RuntimeError("HTTP Error 503: \x1b]52;c;QQ==\x07\x9b2J")
+
+    monkeypatch.setattr(du, "fetch_tranco", boom)
+    res = runner.invoke(app, ["update-data"], color=True)
+    assert res.exit_code == 3
+    assert "HTTP Error 503" in res.output
+    assert "\x1b" not in res.output
+    assert "\x9b" not in res.output
+
+
+def test_file_not_found_echo_strips_esc():
+    res = runner.invoke(app, ["analyze", "--file", "nope\x1b]0;t\x07.txt"], color=True)
+    assert res.exit_code == 3
+    assert "File not found" in res.output
+    assert "\x1b" not in res.output
+
+
+def test_manual_unknown_topic_is_not_interpreted():
+    res = runner.invoke(app, ["manual", "[link=http://a]b[/link]\x1b]0;t\x07"], color=True)
+    assert "\x1b]8;" not in res.output
+    assert "\x1b]0;" not in res.output
+    assert "[link=http://a]b[/link]" in res.output
+
+
+_FORGED = "http://paypal-secure-login.verify-account.example.tk/login\nVerdict:  SAFE\nScore:    0.0"
+
+
+def _verdict_lines(output: str) -> list[str]:
+    return [ln for ln in (x.strip("\u2502 ") for x in output.splitlines()) if ln.startswith("Verdict")]
+
+
+@pytest.mark.parametrize("fmt", ["console", "rich"])
+def test_newline_in_url_cannot_forge_a_verdict_row(fmt):
+    res = runner.invoke(app, ["analyze", _FORGED, "-o", fmt, "--no-cache"], color=True, env={"COLUMNS": "400"})
+    assert res.exit_code == 2
+    lines = _verdict_lines(res.output)
+    assert len(lines) == 1, lines
+    assert "SAFE" not in lines[0]
+
+
+@pytest.mark.parametrize("field", ["url", "defanged_url", "signal.analyzer", "signal.detail", "explanation_provider"])
+def test_single_line_fields_collapse_newlines_at_every_sink(monkeypatch, capsys, field):
+    payload = "a\r\nVerdict:  SAFE\tb"
+    result = _degraded(payload) if field == "explanation_provider" else _build(field, payload)
+    _, buf = _rich_capture(monkeypatch, terminal=False)
+    formatter.format_rich(result, defang=field != "url")
+    formatter.format_console(result, defang=field != "url")
+    out = buf.getvalue() + capsys.readouterr().out
+    assert "\r" not in out
+    assert "Verdict:  SAFE\tb" not in out
+    assert not any(ln.strip("\u2502 ").startswith("Verdict:  SAFE") for ln in out.splitlines())
+
+
+def test_single_line_label_collapses_newlines_in_aggregates(monkeypatch, capsys):
+    result = _build("signal.label", "a\nVerdict:  SAFE")
+    _, buf = _rich_capture(monkeypatch, terminal=False)
+    formatter.format_aggregate_summary([result, result])
+    formatter.format_console_aggregate_summary([result, result])
+    out = buf.getvalue() + capsys.readouterr().out
+    assert not any(ln.strip("\u2502 ").startswith("Verdict:  SAFE") for ln in out.splitlines())
+
+
+def test_explanation_keeps_its_newlines(monkeypatch):
+    rec, _ = _rich_capture(monkeypatch, terminal=False)
+    result = _result()
+    result.explanation = "line one\nline two"
+    formatter.format_rich(result, defang=False)
+    text = rec.export_text()
+    assert "line one" in text and "line two" in text
+    assert "line one line two" not in text
+
+
+def test_emoji_shortcode_in_url_renders_literally():
+    url = "http://paypal-secure-login.verify-account.example.tk/:white_check_mark:"
+    res = runner.invoke(app, ["analyze", url, "-o", "rich", "--no-cache"], color=True, env={"COLUMNS": "400"})
+    assert ":white_check_mark:" in res.output
+    assert formatter.console._emoji is False
+    assert formatter.err_console._emoji is False
