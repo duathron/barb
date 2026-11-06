@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from shipwright_kit.config import app_dir
 from shipwright_kit.config import load_config as _resolve_config
 
@@ -109,17 +109,42 @@ def _ensure_app_dir() -> Path:
     return app_dir("barb", create=True)
 
 
+class ConfigError(ValueError):
+    """Invalid configuration; the message never contains configured values."""
+
+
+def _validate(data: dict) -> AppConfig:
+    if not isinstance(data, dict):
+        raise ConfigError("config.yaml must be a YAML mapping")
+    try:
+        return AppConfig(**data)
+    except ValidationError as exc:
+        # include_input=False: a mistyped api_key must not be echoed back.
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors(include_input=False)
+        )
+        raise ConfigError(f"Invalid configuration: {problems}") from None
+
+
 def _load_yaml(path: Path) -> dict:
     with open(path) as f:
-        return yaml.safe_load(f) or {}
+        try:
+            return yaml.safe_load(f) or {}
+        except (yaml.YAMLError, UnicodeDecodeError):
+            # PyYAML marks/locals carry file content; keep them out of the traceback.
+            raise ConfigError("config.yaml is not valid YAML") from None
 
 
 def load_config(config_path: Optional[Path] = None) -> AppConfig:
-    """Load configuration from YAML file with env var overrides."""
+    """Load configuration from YAML file with env var overrides.
+
+    The current working directory is deliberately not searched: a stray
+    ``./config.yaml`` (e.g. in a downloaded repo) must not change verdicts.
+    """
     config = _resolve_config(
-        [config_path, _APP_DIR / "config.yaml", Path("config.yaml")],
+        [config_path, _APP_DIR / "config.yaml"],
         loader=_load_yaml,
-        validator=lambda data: AppConfig(**data),
+        validator=_validate,
     )
 
     # Env var overrides

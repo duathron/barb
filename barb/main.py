@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +12,8 @@ import typer
 
 from barb import __version__
 from barb.banner import show_banner
-from barb.config import AppConfig, load_config
+from barb.config import AppConfig, ConfigError
+from barb.config import load_config as _load_config
 from barb.defang import defang_url, refang_url
 from barb.help import _MANUAL_TOPICS
 from barb.models import AnalysisResult
@@ -35,6 +37,7 @@ app = typer.Typer(
     name="barb",
     help="Heuristic phishing URL analyzer for SOC/DFIR workflows.",
     no_args_is_help=True,
+    pretty_exceptions_show_locals=False,  # tracebacks must never dump locals (API key)
 )
 
 
@@ -480,6 +483,15 @@ def _output_results(
                     format_rich(result, defang=defang)
 
 
+def load_config() -> AppConfig:
+    """Load config; an invalid file becomes a one-line error and exit 3."""
+    try:
+        return _load_config()
+    except ConfigError as exc:
+        typer.echo(f"Error: {_plain_safe(exc)}", err=True)
+        raise typer.Exit(3) from None
+
+
 @app.command()
 def config(
     show: Annotated[bool, typer.Option("--show", help="Show current configuration")] = False,
@@ -489,7 +501,16 @@ def config(
         cfg = load_config()
         import yaml
 
-        typer.echo(yaml.dump(cfg.model_dump(), default_flow_style=False, sort_keys=False))
+        data = cfg.model_dump()
+        if data["explain"]["api_key"]:
+            data["explain"]["api_key"] = "***"
+        # Anything before the LAST "@" may be userinfo (raw / ? # allowed in practice):
+        # hide it all, keeping only a leading "scheme://" or "//". A legitimate "@" in a
+        # path/query is hidden too; acceptable for a host setting.
+        data["explain"]["ollama_host"] = re.sub(
+            r"^((?:[A-Za-z][\w+.-]*:)?//)?.*@", r"\1***@", data["explain"]["ollama_host"], flags=re.S
+        )
+        typer.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
     else:
         typer.echo("Use --show to display current configuration.")
         typer.echo("Config file: ~/.barb/config.yaml")
