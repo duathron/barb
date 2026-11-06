@@ -215,6 +215,92 @@ def test_cache_refuses_symlink_db(tmp_path):
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_symlinked_sidecars_are_never_chmodded_through(tmp_path, monkeypatch):
+    """sqlite replaces a pre-planted sidecar symlink itself, so plant the symlinks
+    deterministically right after the commit, i.e. just before the chmod loop."""
+    db = tmp_path / "cache.db"
+    victims = []
+    for suffix in ("-wal", "-shm"):
+        victim = tmp_path / f"victim{suffix}.txt"
+        victim.write_bytes(b"victim")
+        victim.chmod(0o644)
+        victims.append(victim)
+    real_connect = sqlite3.connect
+
+    class Planting:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def commit(self):
+            self._conn.commit()
+            for suffix, victim in zip(("-wal", "-shm"), victims):
+                side = tmp_path / f"cache.db{suffix}"
+                side.rename(tmp_path / f"moved{suffix}")
+                side.symlink_to(victim)
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", lambda *a, **k: Planting(real_connect(*a, **k)))
+    c = OsintCache(db_path=db)
+    c.close()
+    for victim in victims:
+        assert victim.read_bytes() == b"victim"
+        assert stat.S_IMODE(victim.stat().st_mode) == 0o644, victim.name
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_db_replaced_by_other_regular_file_between_open_and_connect_disables_cache(tmp_path, monkeypatch):
+    real_connect = sqlite3.connect
+    db = tmp_path / "cache.db"
+    seen = []
+
+    def swapping_connect(database, *args, **kwargs):
+        db.rename(tmp_path / "moved.db")
+        db.write_bytes(b"")
+        seen.append(1)
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", swapping_connect)
+    c = OsintCache(db_path=db)
+    c.set("evil.com", [_sig()])
+    assert seen == [1]
+    assert c.get("evil.com", ttl_seconds=60) is None
+    assert db.read_bytes() == b""
+    c.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_db_swapped_for_symlink_between_open_and_connect_disables_cache(tmp_path, monkeypatch):
+    """Deterministic race: swap cache.db for a symlink to a valid SQLite DB after the
+    O_NOFOLLOW open but before sqlite3.connect; the victim must stay untouched."""
+    victim = tmp_path / "victim.db"
+    vc = sqlite3.connect(str(victim))
+    vc.execute("CREATE TABLE precious (x)")
+    vc.commit()
+    vc.close()
+    real_connect = sqlite3.connect
+    db = tmp_path / "cache.db"
+
+    def swapping_connect(database, *args, **kwargs):
+        db.rename(tmp_path / "moved.db")
+        db.symlink_to(victim)
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", swapping_connect)
+    c = OsintCache(db_path=db)
+    c.set("evil.com", [_sig()])
+    assert c.get("evil.com", ttl_seconds=60) is None
+    c.close()
+    chk = real_connect(str(victim))
+    tables = {r[0] for r in chk.execute("SELECT name FROM sqlite_master")}
+    mode = chk.execute("PRAGMA journal_mode").fetchone()[0]
+    chk.close()
+    assert tables == {"precious"}
+    assert mode != "wal"
+
+
 # ---------------------------------------------------------------------------
 # Integration: _run_enrichers uses the cache
 # ---------------------------------------------------------------------------

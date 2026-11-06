@@ -397,7 +397,8 @@ class TestParseTrancoZipBounds:
         assert peak < 32 * _MIB
 
     def test_top_n_never_reached_still_completes(self):
-        raw = _zip_streamed(_repeat(b"1,dup.example\n", 120 * _MIB))
+        # 1.5M duplicate rows: inside the line budget, top_n never reached.
+        raw = _zip_streamed([b"1,dup.example\n" * 1_500_000])
         assert parse_tranco(raw, top_n=1000) == ["dup.example"]
 
     def test_member_without_newline_is_bounded(self):
@@ -412,3 +413,80 @@ class TestParseTrancoZipBounds:
         finally:
             tracemalloc.stop()
         assert peak < 8 * _MIB
+
+
+class TestParseTrancoLineBudget:
+    @pytest.mark.parametrize(
+        "block",
+        [b"\n", b"\r\n", b"1,a.com\n"],
+        ids=["blank-lf", "blank-crlf", "short-valid-dupes"],
+    )
+    def test_zip_with_too_many_lines_is_rejected_fast(self, block):
+        import time
+
+        raw = _zip_streamed(_repeat(block, 127 * _MIB))
+        t0 = time.monotonic()
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(raw, top_n=1000)
+        assert time.monotonic() - t0 < 5
+
+    def test_raw_csv_with_too_many_lines_is_rejected_bounded(self):
+        import time
+        import tracemalloc
+
+        raw = b"\n" * (50 * _MIB)
+        tracemalloc.start()
+        t0 = time.monotonic()
+        try:
+            with pytest.raises(RuntimeError, match="too many lines"):
+                parse_tranco(raw, top_n=1000)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert time.monotonic() - t0 < 30
+        assert peak < 16 * _MIB
+
+    def test_raw_csv_long_line_is_rejected(self):
+        with pytest.raises(RuntimeError, match="line too long"):
+            parse_tranco(b"x" * 200_000, top_n=10)
+
+    def test_empty_zip_is_rejected(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w"):
+            pass
+        with pytest.raises(RuntimeError, match="no members"):
+            parse_tranco(buf.getvalue(), top_n=10)
+
+
+class TestParseTrancoDomainValidation:
+    def test_oversized_binary_and_junk_rows_are_skipped_punycode_kept(self):
+        raw = b"\n".join(
+            [
+                b"1,good.example",
+                b"2," + b"a" * 300 + b".com",
+                b"3,\x00\xff\x80binary",
+                b"4,has space.example",
+                b"5,xn--80ak6aa92e.com",
+                b"6,UPPER.Example",
+            ]
+        )
+        assert parse_tranco(raw, top_n=10) == ["good.example", "xn--80ak6aa92e.com", "upper.example"]
+
+    def test_bare_domain_format_is_validated_too(self):
+        assert parse_tranco(b"ok.example\nbad/path\n", top_n=10) == ["ok.example"]
+
+
+class TestUpdateDataZeroDomains:
+    def test_zero_valid_domains_keeps_existing_allowlist_and_exits_3(self, tmp_path, monkeypatch):
+        import barb.data_update as du
+
+        dest = tmp_path / ".barb" / "data" / "allowlist.json"
+        dest.parent.mkdir(parents=True)
+        dest.write_text('["keep.example"]')
+        monkeypatch.setattr(du, "user_allowlist_path", lambda: dest)
+        monkeypatch.setattr(du, "fetch_tranco", lambda url, timeout=30.0: b"1,bad domain\n2,/x\n")
+        result = runner.invoke(app, ["update-data", "--source", "https://tranco-list.eu/x.csv"])
+        assert result.exit_code == 3, result.output
+        assert "no valid domains" in result.output
+        assert dest.read_text() == '["keep.example"]'
+        assert "written" not in result.output

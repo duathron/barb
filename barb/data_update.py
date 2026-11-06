@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -27,6 +28,9 @@ _MAX_BYTES = 50 * 1024 * 1024  # 50 MB hard cap
 _MAX_ZIP_MEMBERS = 16
 _MAX_ZIP_UNCOMPRESSED = 128 * 1024 * 1024  # real list is ~23 MB; >= 4x headroom
 _MAX_LINE_BYTES = 65536
+_MAX_LINES = 2_000_000  # real list ~1M rows; counts EVERY line incl. blank ones
+_MAX_DOMAIN_LEN = 253
+_DOMAIN_RE = re.compile(r"^[a-z0-9._-]+$")
 
 
 def user_allowlist_path() -> Path:
@@ -102,21 +106,27 @@ def parse_tranco(raw: bytes, top_n: int) -> list[str]:
                 )
             # Pick the first .csv file; fall back to first member
             names = [i.filename for i in infos]
+            if not names:
+                raise RuntimeError("Archive rejected: no members.")
             csv_names = [n for n in names if n.lower().endswith(".csv")]
             member = csv_names[0] if csv_names else names[0]
             # Stream the member: a header can lie about its size, a deflate stream
             # can expand ~1000x, so never materialise the whole member in memory.
             with zf.open(member) as fh:
                 return _collect_domains(_iter_zip_lines(fh), top_n)
-    return _collect_domains(raw.decode("utf-8", errors="replace").splitlines(), top_n)
+    return _collect_domains(_iter_zip_lines(io.BytesIO(raw)), top_n)
 
 
 def _iter_zip_lines(fh):
-    """Yield decoded lines from a binary stream with bounded per-line memory."""
+    """Yield decoded lines from a binary stream with bounded per-line memory and line count."""
+    count = 0
     while True:
         chunk = fh.readline(_MAX_LINE_BYTES)
         if not chunk:
             return
+        count += 1
+        if count > _MAX_LINES:
+            raise RuntimeError("Archive rejected: too many lines.")
         if len(chunk) >= _MAX_LINE_BYTES and not chunk.endswith(b"\n"):
             raise RuntimeError("Archive rejected: line too long.")
         yield from chunk.decode("utf-8", errors="replace").splitlines()
@@ -142,6 +152,9 @@ def _collect_domains(lines, top_n: int) -> list[str]:
             domain = parts[0].strip().lower()
             if domain.lower() == "domain":
                 continue  # header
+
+        if len(domain) > _MAX_DOMAIN_LEN or not _DOMAIN_RE.match(domain):
+            continue  # not a hostname (oversized, binary, whitespace, ...)
 
         if domain and domain not in seen:
             seen.add(domain)

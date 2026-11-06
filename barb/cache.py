@@ -61,8 +61,17 @@ class OsintCache:
                 os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
                 _FILE_MODE,
             )
-            os.close(fd)
-            self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
+            try:
+                self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
+                # Narrow (not close) the open->connect race: the path must still be the
+                # very file we created, not a symlink swapped in meanwhile. Needs a
+                # same-uid attacker and a 0700 directory to begin with.
+                created = os.fstat(fd)
+                now = os.lstat(self._db_path)
+                if (created.st_dev, created.st_ino) != (now.st_dev, now.st_ino):  # also true for a symlink
+                    raise OSError("cache path changed during open")
+            finally:
+                os.close(fd)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute(_SCHEMA)
             self._conn.commit()
@@ -76,6 +85,11 @@ class OsintCache:
                 except OSError:
                     pass
         except (sqlite3.Error, OSError):
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except sqlite3.Error:
+                    pass
             self._conn = None  # Fail-open: behave as a disabled cache
 
     def get(self, host: str, ttl_seconds: float) -> Optional[list[Signal]]:
