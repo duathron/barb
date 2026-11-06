@@ -215,6 +215,21 @@ def test_cache_refuses_symlink_db(tmp_path):
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
 
 
+class _ClosingProxy:
+    """Forward everything to a real connection and record close() calls."""
+
+    def __init__(self, conn, closed):
+        self._conn = conn
+        self._closed = closed
+
+    def close(self):
+        self._closed.append(1)
+        return self._conn.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
 def test_symlinked_sidecars_are_never_chmodded_through(tmp_path, monkeypatch):
     """sqlite replaces a pre-planted sidecar symlink itself, so plant the symlinks
@@ -255,15 +270,17 @@ def test_db_replaced_by_other_regular_file_between_open_and_connect_disables_cac
     real_connect = sqlite3.connect
     db = tmp_path / "cache.db"
     seen = []
+    closed: list = []
 
     def swapping_connect(database, *args, **kwargs):
         db.rename(tmp_path / "moved.db")
         db.write_bytes(b"")
         seen.append(1)
-        return real_connect(database, *args, **kwargs)
+        return _ClosingProxy(real_connect(database, *args, **kwargs), closed)
 
     monkeypatch.setattr("barb.cache.sqlite3.connect", swapping_connect)
     c = OsintCache(db_path=db)
+    assert closed == [1]  # the connection opened on the swapped path was closed
     c.set("evil.com", [_sig()])
     assert seen == [1]
     assert c.get("evil.com", ttl_seconds=60) is None
@@ -282,14 +299,16 @@ def test_db_swapped_for_symlink_between_open_and_connect_disables_cache(tmp_path
     vc.close()
     real_connect = sqlite3.connect
     db = tmp_path / "cache.db"
+    closed: list = []
 
     def swapping_connect(database, *args, **kwargs):
         db.rename(tmp_path / "moved.db")
         db.symlink_to(victim)
-        return real_connect(database, *args, **kwargs)
+        return _ClosingProxy(real_connect(database, *args, **kwargs), closed)
 
     monkeypatch.setattr("barb.cache.sqlite3.connect", swapping_connect)
     c = OsintCache(db_path=db)
+    assert closed == [1]  # the connection opened on the swapped path was closed
     c.set("evil.com", [_sig()])
     assert c.get("evil.com", ttl_seconds=60) is None
     c.close()

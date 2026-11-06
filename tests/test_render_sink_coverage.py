@@ -511,7 +511,7 @@ def test_update_data_write_error_strips_esc_and_c1(monkeypatch):
         raise OSError("disk " + _HOSTILE)
 
     monkeypatch.setattr(du, "fetch_tranco", lambda *a, **k: b"x")
-    monkeypatch.setattr(du, "parse_tranco", lambda *a, **k: ["a.example"])
+    monkeypatch.setattr(du, "parse_tranco", lambda *a, **k: [f"a{i}.example" for i in range(500)])  # >= 10% floor
     monkeypatch.setattr(du, "write_user_allowlist", boom)
     res = runner.invoke(app, ["update-data"], color=True)
     assert res.exit_code == 3

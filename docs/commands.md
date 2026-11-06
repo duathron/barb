@@ -286,6 +286,13 @@ barb update-data --top-n 10000
 - Opt-in only — `barb analyze` never triggers a download.
 - HTTPS only — a `--source` that does not start with `https://` is rejected
   before any network call (exit code `3`).
+- Bounded parsing — at most 16 archive members, 128 MiB declared size, 2,000,000 lines
+  (blank lines count) and 64 KiB per line; larger input is rejected (exit code `3`).
+- Only hostname-shaped entries are kept: at least two labels of 1–63 characters
+  (`a-z`, `0-9`, `-`; punycode `xn--` is fine), at most 253 characters in total, and
+  common multi-label public suffixes such as `co.uk` are dropped. One trailing dot is removed.
+- No/too few valid domains — if fewer than 10 % of `--top-n` entries survive, the command
+  exits `3` and the existing allowlist is left unchanged.
 - Atomic write — temp file + `os.replace`; no partial writes visible.
 - Write location: `~/.barb/data/allowlist.json` (`0o600`, directory `0o700`).
 - No extra dependencies — stdlib `urllib` only.

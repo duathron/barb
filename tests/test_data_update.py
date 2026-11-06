@@ -468,12 +468,54 @@ class TestParseTrancoDomainValidation:
                 b"4,has space.example",
                 b"5,xn--80ak6aa92e.com",
                 b"6,UPPER.Example",
+                b"7,xn--mnchen-3ya.de",
             ]
         )
-        assert parse_tranco(raw, top_n=10) == ["good.example", "xn--80ak6aa92e.com", "upper.example"]
+        assert parse_tranco(raw, top_n=10) == [
+            "good.example",
+            "xn--80ak6aa92e.com",
+            "upper.example",
+            "xn--mnchen-3ya.de",
+        ]
 
     def test_bare_domain_format_is_validated_too(self):
         assert parse_tranco(b"ok.example\nbad/path\n", top_n=10) == ["ok.example"]
+
+    @pytest.mark.parametrize(
+        "junk",
+        ["....", "-", "_", ".", "a..b", "com", "-a.com", "a-.com", "a_b.com", "a" * 64 + ".com", ".com", "a.-"],
+    )
+    def test_malformed_names_are_skipped(self, junk):
+        assert parse_tranco(f"1,{junk}\n2,ok.example\n".encode(), top_n=10) == ["ok.example"]
+
+    @pytest.mark.parametrize(
+        "suffix",
+        [
+            "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "com.br",
+            "net.br", "co.jp", "co.nz", "co.za", "com.cn", "com.mx", "co.in", "com.tr",
+        ],
+    )  # fmt: skip
+    def test_public_suffixes_are_rejected_but_names_below_them_kept(self, suffix):
+        assert parse_tranco(f"1,{suffix}\n2,example.{suffix}\n".encode(), top_n=10) == [f"example.{suffix}"]
+
+    def test_single_trailing_dot_is_normalised(self):
+        assert parse_tranco(b"1,example.com.\n", top_n=10) == ["example.com"]
+
+    def test_total_length_over_253_is_skipped_even_with_valid_labels(self):
+        long_name = ".".join(["a" * 60] * 5) + ".com"  # every label valid, 309 chars total
+        assert parse_tranco(f"1,{long_name}\n2,ok.example\n".encode(), top_n=10) == ["ok.example"]
+
+
+class TestLineBudgetCountsYieldedLines:
+    def test_cr_only_chunks_are_counted_per_line(self):
+        import time
+
+        # Each 64 KiB chunk holds ~65k "lines" once splitlines() runs.
+        raw = _zip_streamed(_repeat((b"\r" * 65534 + b"\n"), 20 * _MIB))
+        t0 = time.monotonic()
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(raw, top_n=1000)
+        assert time.monotonic() - t0 < 3
 
 
 class TestUpdateDataZeroDomains:
@@ -490,3 +532,33 @@ class TestUpdateDataZeroDomains:
         assert "no valid domains" in result.output
         assert dest.read_text() == '["keep.example"]'
         assert "written" not in result.output
+
+    def _run(self, tmp_path, monkeypatch, payload: bytes, args=()):
+        import barb.data_update as du
+
+        dest = tmp_path / ".barb" / "data" / "allowlist.json"
+        dest.parent.mkdir(parents=True)
+        original = json.dumps([f"keep{i}.example" for i in range(5000)]).encode()
+        dest.write_bytes(original)
+        monkeypatch.setattr(du, "user_allowlist_path", lambda: dest)
+        monkeypatch.setattr(du, "fetch_tranco", lambda url, timeout=30.0: payload)
+        result = runner.invoke(app, ["update-data", "--source", "https://tranco-list.eu/x.csv", *args])
+        return result, dest, original
+
+    def test_junk_and_public_suffix_only_archive_keeps_5000_entry_allowlist(self, tmp_path, monkeypatch):
+        result, dest, original = self._run(tmp_path, monkeypatch, b"1,....\n2,-\n3,co.uk\n4,com\n")
+        assert result.exit_code == 3, result.output
+        assert dest.read_bytes() == original
+
+    def test_result_below_ten_percent_of_top_n_is_refused(self, tmp_path, monkeypatch):
+        payload = "".join(f"{i},d{i}.example\n" for i in range(100)).encode()  # 100 < 10% of 5000
+        result, dest, original = self._run(tmp_path, monkeypatch, payload)
+        assert result.exit_code == 3, result.output
+        assert "valid domains" in result.output
+        assert dest.read_bytes() == original
+
+    def test_result_at_ten_percent_is_accepted(self, tmp_path, monkeypatch):
+        payload = "".join(f"{i},d{i}.example\n" for i in range(500)).encode()  # exactly 10%
+        result, dest, original = self._run(tmp_path, monkeypatch, payload)
+        assert result.exit_code == 0, result.output
+        assert dest.read_bytes() != original

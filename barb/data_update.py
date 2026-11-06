@@ -30,7 +30,25 @@ _MAX_ZIP_UNCOMPRESSED = 128 * 1024 * 1024  # real list is ~23 MB; >= 4x headroom
 _MAX_LINE_BYTES = 65536
 _MAX_LINES = 2_000_000  # real list ~1M rows; counts EVERY line incl. blank ones
 _MAX_DOMAIN_LEN = 253
-_DOMAIN_RE = re.compile(r"^[a-z0-9._-]+$")
+_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")  # 1-63 chars, no edge hyphen; xn-- passes
+# Multi-label public suffixes. barb's allowlist lookup matches the last two labels, so an
+# entry such as "co.uk" would allowlist every *.co.uk host. Short, exact-match, not the full PSL.
+_PUBLIC_SUFFIXES = frozenset(
+    {
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "com.br",
+        "net.br", "co.jp", "co.nz", "co.za", "com.cn", "com.mx", "co.in", "com.tr",
+    }
+)  # fmt: skip
+
+
+def _valid_domain(domain: str) -> bool:
+    """True for a hostname with >= 2 well-formed labels that is not a known public suffix."""
+    if len(domain) > _MAX_DOMAIN_LEN:
+        return False
+    labels = domain.split(".")
+    if len(labels) < 2 or not all(_LABEL_RE.match(label) for label in labels):
+        return False
+    return domain not in _PUBLIC_SUFFIXES
 
 
 def user_allowlist_path() -> Path:
@@ -124,12 +142,14 @@ def _iter_zip_lines(fh):
         chunk = fh.readline(_MAX_LINE_BYTES)
         if not chunk:
             return
-        count += 1
-        if count > _MAX_LINES:
-            raise RuntimeError("Archive rejected: too many lines.")
         if len(chunk) >= _MAX_LINE_BYTES and not chunk.endswith(b"\n"):
             raise RuntimeError("Archive rejected: line too long.")
-        yield from chunk.decode("utf-8", errors="replace").splitlines()
+        # Count the lines actually yielded (splitlines also splits on \r etc.), not chunks.
+        pieces = chunk.decode("utf-8", errors="replace").splitlines()
+        count += max(1, len(pieces))
+        if count > _MAX_LINES:
+            raise RuntimeError("Archive rejected: too many lines.")
+        yield from pieces
 
 
 def _collect_domains(lines, top_n: int) -> list[str]:
@@ -150,13 +170,12 @@ def _collect_domains(lines, top_n: int) -> list[str]:
         else:
             # Plain domain-per-line format
             domain = parts[0].strip().lower()
-            if domain.lower() == "domain":
-                continue  # header
 
-        if len(domain) > _MAX_DOMAIN_LEN or not _DOMAIN_RE.match(domain):
-            continue  # not a hostname (oversized, binary, whitespace, ...)
+        domain = domain.removesuffix(".")  # one trailing root dot is normalised away
+        if not _valid_domain(domain):
+            continue  # not a hostname (junk, single label, public suffix, ...); also drops a "domain" header
 
-        if domain and domain not in seen:
+        if domain not in seen:
             seen.add(domain)
             domains.append(domain)
             if len(domains) >= top_n:
