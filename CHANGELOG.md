@@ -5,6 +5,16 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.1](https://github.com/duathron/barb/compare/v1.8.0...v1.8.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* escape attacker-controlled text in terminal output (rich, console, errors) ([#38](https://github.com/duathron/barb/issues/38)) ([f0a08dc](https://github.com/duathron/barb/commit/f0a08dcca74fd6059b48c7e42083538c1e4913df))
+* escape STIX patterns and neutralise CSV and JSON output ([#40](https://github.com/duathron/barb/issues/40)) ([40a9dcd](https://github.com/duathron/barb/commit/40a9dcd578b76546fa76226213be3a8540df0dab))
+* stop reading config from the current directory and mask the API key in config show ([#41](https://github.com/duathron/barb/issues/41)) ([aa951e8](https://github.com/duathron/barb/commit/aa951e8b1919bdfc77d784b8f0ae46f513f2c281))
+* tighten cache file permissions, cap zip size and drop dotenv loading ([#42](https://github.com/duathron/barb/issues/42)) ([0eb4723](https://github.com/duathron/barb/commit/0eb4723d4e9c3af9d93cfedb04b21b9ea42f2d5e))
+
 ## [1.8.0](https://github.com/duathron/barb/compare/v1.7.3...v1.8.0) (2026-07-05)
 
 
