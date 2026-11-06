@@ -504,8 +504,11 @@ def config(
         data = cfg.model_dump()
         if data["explain"]["api_key"]:
             data["explain"]["api_key"] = "***"
+        # Anything before the LAST "@" may be userinfo (raw / ? # allowed in practice):
+        # hide it all, keeping only a leading "scheme://" or "//". A legitimate "@" in a
+        # path/query is hidden too; acceptable for a host setting.
         data["explain"]["ollama_host"] = re.sub(
-            r"^((?:[A-Za-z][\w+.-]*://)?)[^/?#]*@", r"\1***@", data["explain"]["ollama_host"]
+            r"^((?:[A-Za-z][\w+.-]*:)?//)?.*@", r"\1***@", data["explain"]["ollama_host"], flags=re.S
         )
         typer.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
     else:
