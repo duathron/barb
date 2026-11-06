@@ -40,7 +40,7 @@ Built-in guide: `barb manual` (and `barb manual analyzers` / `osint` / `pipeline
 - **Automation-ready**: exit codes (0=safe, 1=suspicious, 2=phishing, 3=error, 4=explanation degraded — an LLM `--explain` failed; the verdict is still valid, see below), `--threshold` filtering
 - **IOC defanging**: automatic in terminal output (`hxxps[://]evil[.]com`); accepts defanged IOCs on input (`hxxp://`, `[.]`, `[dot]`, `[at]`, fullwidth, zero-width) — refanged before analysis
 - **Configurable scoring**: per-analyzer weights and verdict thresholds via YAML
-- **Minimal dependencies**: 5 core packages (typer, rich, pydantic, pyyaml, python-dotenv)
+- **Minimal dependencies**: 5 core packages (typer, rich, pydantic, pyyaml, shipwright-kit)
 
 ---
 

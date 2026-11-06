@@ -582,6 +582,18 @@ def update_data(
         typer.echo(f"Error parsing list: {_plain_safe(exc)}", err=True)
         raise typer.Exit(3)
 
+    if not domains:
+        typer.echo("Error: the source yielded no valid domains; allowlist left unchanged.", err=True)
+        raise typer.Exit(3)
+
+    if len(domains) < max(1, top_n // 10):
+        typer.echo(
+            f"Error: the source yielded only {len(domains)} valid domains (expected at least "
+            f"{max(1, top_n // 10)} for --top-n {top_n}); allowlist left unchanged.",
+            err=True,
+        )
+        raise typer.Exit(3)
+
     try:
         dest = write_user_allowlist(domains)
     except Exception as exc:

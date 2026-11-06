@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -24,6 +25,30 @@ from urllib.request import urlopen
 
 _DEFAULT_TRANCO_URL = "https://tranco-list.eu/top-1m.csv.zip"
 _MAX_BYTES = 50 * 1024 * 1024  # 50 MB hard cap
+_MAX_ZIP_MEMBERS = 16
+_MAX_ZIP_UNCOMPRESSED = 128 * 1024 * 1024  # real list is ~23 MB; >= 4x headroom
+_MAX_LINE_BYTES = 65536
+_MAX_LINES = 2_000_000  # real list ~1M rows; counts EVERY line incl. blank ones
+_MAX_DOMAIN_LEN = 253
+_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")  # 1-63 chars, no edge hyphen; xn-- passes
+# Multi-label public suffixes. barb's allowlist lookup matches the last two labels, so an
+# entry such as "co.uk" would allowlist every *.co.uk host. Short, exact-match, not the full PSL.
+_PUBLIC_SUFFIXES = frozenset(
+    {
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "com.br",
+        "net.br", "co.jp", "co.nz", "co.za", "com.cn", "com.mx", "co.in", "com.tr",
+    }
+)  # fmt: skip
+
+
+def _valid_domain(domain: str) -> bool:
+    """True for a hostname with >= 2 well-formed labels that is not a known public suffix."""
+    if len(domain) > _MAX_DOMAIN_LEN:
+        return False
+    labels = domain.split(".")
+    if len(labels) < 2 or not all(_LABEL_RE.match(label) for label in labels):
+        return False
+    return domain not in _PUBLIC_SUFFIXES
 
 
 def user_allowlist_path() -> Path:
@@ -90,18 +115,48 @@ def parse_tranco(raw: bytes, top_n: int) -> list[str]:
     # Detect ZIP by magic bytes
     if raw[:2] == b"PK":
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            infos = zf.infolist()
+            if len(infos) > _MAX_ZIP_MEMBERS:
+                raise RuntimeError(f"Archive rejected: more than {_MAX_ZIP_MEMBERS} members.")
+            if sum(i.file_size for i in infos) > _MAX_ZIP_UNCOMPRESSED:
+                raise RuntimeError(
+                    f"Archive rejected: uncompressed size exceeds {_MAX_ZIP_UNCOMPRESSED // (1024 * 1024)} MB."
+                )
             # Pick the first .csv file; fall back to first member
-            csv_names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
-            member = csv_names[0] if csv_names else zf.namelist()[0]
-            csv_bytes = zf.read(member)
-    else:
-        csv_bytes = raw
+            names = [i.filename for i in infos]
+            if not names:
+                raise RuntimeError("Archive rejected: no members.")
+            csv_names = [n for n in names if n.lower().endswith(".csv")]
+            member = csv_names[0] if csv_names else names[0]
+            # Stream the member: a header can lie about its size, a deflate stream
+            # can expand ~1000x, so never materialise the whole member in memory.
+            with zf.open(member) as fh:
+                return _collect_domains(_iter_zip_lines(fh), top_n)
+    return _collect_domains(_iter_zip_lines(io.BytesIO(raw)), top_n)
 
-    text = csv_bytes.decode("utf-8", errors="replace")
+
+def _iter_zip_lines(fh):
+    """Yield decoded lines from a binary stream with bounded per-line memory and line count."""
+    count = 0
+    while True:
+        chunk = fh.readline(_MAX_LINE_BYTES)
+        if not chunk:
+            return
+        if len(chunk) >= _MAX_LINE_BYTES and not chunk.endswith(b"\n"):
+            raise RuntimeError("Archive rejected: line too long.")
+        # Count the lines actually yielded (splitlines also splits on \r etc.), not chunks.
+        pieces = chunk.decode("utf-8", errors="replace").splitlines()
+        count += max(1, len(pieces))
+        if count > _MAX_LINES:
+            raise RuntimeError("Archive rejected: too many lines.")
+        yield from pieces
+
+
+def _collect_domains(lines, top_n: int) -> list[str]:
     seen: set[str] = set()
     domains: list[str] = []
 
-    for line in text.splitlines():
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -115,10 +170,12 @@ def parse_tranco(raw: bytes, top_n: int) -> list[str]:
         else:
             # Plain domain-per-line format
             domain = parts[0].strip().lower()
-            if domain.lower() == "domain":
-                continue  # header
 
-        if domain and domain not in seen:
+        domain = domain.removesuffix(".")  # one trailing root dot is normalised away
+        if not _valid_domain(domain):
+            continue  # not a hostname (junk, single label, public suffix, ...); also drops a "domain" header
+
+        if domain not in seen:
             seen.add(domain)
             domains.append(domain)
             if len(domains) >= top_n:

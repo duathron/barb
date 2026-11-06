@@ -16,6 +16,7 @@ so the cache is safe to share across the batch ThreadPoolExecutor.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -51,15 +52,44 @@ class OsintCache:
         """Open the SQLite connection and ensure schema + secure file permissions."""
         try:
             self._db_path.parent.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
+            # Create the file 0600 BEFORE sqlite ever sees it: sqlite copies the main
+            # file's permissions onto its -wal/-shm sidecars, so a 0600 start means
+            # nothing is ever world-readable. O_NOFOLLOW refuses a planted symlink
+            # (ELOOP -> OSError -> disabled cache) instead of writing through it.
+            fd = os.open(
+                self._db_path,
+                os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                _FILE_MODE,
+            )
+            try:
+                self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
+                # Narrow (not close) the open->connect race: the path must still be the
+                # very file we created, not a symlink swapped in meanwhile. Needs a
+                # same-uid attacker and a 0700 directory to begin with.
+                created = os.fstat(fd)
+                now = os.lstat(self._db_path)
+                if (created.st_dev, created.st_ino) != (now.st_dev, now.st_ino):  # also true for a symlink
+                    raise OSError("cache path changed during open")
+            finally:
+                os.close(fd)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute(_SCHEMA)
             self._conn.commit()
-            try:
-                self._db_path.chmod(_FILE_MODE)
-            except OSError:
-                pass  # Permission tightening is best-effort
+            # Belt and braces for a pre-existing 0644 db or sidecars left by an older
+            # barb. Best-effort; symlinked sidecars are never chmod-ed through.
+            for suffix in ("", "-wal", "-shm"):
+                target = Path(str(self._db_path) + suffix)
+                try:
+                    if not target.is_symlink():
+                        target.chmod(_FILE_MODE)
+                except OSError:
+                    pass
         except (sqlite3.Error, OSError):
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except sqlite3.Error:
+                    pass
             self._conn = None  # Fail-open: behave as a disabled cache
 
     def get(self, host: str, ttl_seconds: float) -> Optional[list[Signal]]:

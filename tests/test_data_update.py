@@ -316,3 +316,304 @@ class TestUpdateDataCommand:
         plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
         assert "--top-n" in plain
         assert "--source" in plain
+
+
+# ---------------------------------------------------------------------------
+# parse_tranco — bounded zip parsing
+# ---------------------------------------------------------------------------
+
+_MIB = 1024 * 1024
+
+
+def _zip_streamed(chunks, name: str = "top.csv") -> bytes:
+    """Build a deflate ZIP whose single member is the concatenation of *chunks*."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        with zf.open(name, "w") as fh:
+            for chunk in chunks:
+                fh.write(chunk)
+    return buf.getvalue()
+
+
+def _repeat(block: bytes, total: int):
+    """Yield *block* repeatedly until about *total* bytes were produced."""
+    chunk = block * (_MIB // len(block))
+    for _ in range(total // len(chunk)):
+        yield chunk
+
+
+class TestParseTrancoZipBounds:
+    def test_rejects_zip_exceeding_uncompressed_cap(self, monkeypatch):
+        import barb.data_update as du
+
+        monkeypatch.setattr(du, "_MAX_ZIP_UNCOMPRESSED", 1_000_000)
+        raw = _zip_streamed(_repeat(b"1,a.example\n", 5 * _MIB))
+        assert len(raw) < 100_000  # a tiny archive that inflates to ~5 MB
+        with pytest.raises(RuntimeError, match="uncompressed"):
+            parse_tranco(raw, top_n=10)
+
+    def test_rejects_too_many_members(self):
+        import barb.data_update as du
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for i in range(du._MAX_ZIP_MEMBERS + 1):
+                zf.writestr(f"m{i}.csv", "1,a.example\n")
+        with pytest.raises(RuntimeError, match="members"):
+            parse_tranco(buf.getvalue(), top_n=10)
+
+    def test_header_that_lies_about_size_is_not_trusted(self):
+        # Declare 100 bytes in the central directory while the member inflates to 5 MB.
+        raw = bytearray(_zip_streamed(_repeat(b"1,a.example\n", 5 * _MIB)))
+        cd = raw.rindex(b"PK\x01\x02")
+        raw[cd + 24 : cd + 28] = (100).to_bytes(4, "little")
+        with pytest.raises(zipfile.BadZipFile):
+            parse_tranco(bytes(raw), top_n=10**9)
+
+    def test_realistic_top1m_shape_is_accepted(self):
+        rows = (f"{i},domain{i}.example.com\n".encode() for i in range(1, 1_000_001))
+        raw = _zip_streamed([b"".join(rows)])
+        result = parse_tranco(raw, top_n=1_000_000)
+        assert len(result) == 1_000_000
+        assert result[0] == "domain1.example.com"
+
+    def test_memory_bounded_when_top_n_reached_early(self):
+        import tracemalloc
+
+        head = "".join(f"{i},d{i}.example\n" for i in range(2000)).encode()
+
+        def chunks():
+            yield head
+            yield from _repeat(b"1,filler.example\n", 100 * _MIB)
+
+        raw = _zip_streamed(chunks())
+        tracemalloc.start()
+        try:
+            result = parse_tranco(raw, top_n=1000)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert len(result) == 1000
+        assert peak < 32 * _MIB
+
+    def test_top_n_never_reached_still_completes(self):
+        # 1.5M duplicate rows: inside the line budget, top_n never reached.
+        raw = _zip_streamed([b"1,dup.example\n" * 1_500_000])
+        assert parse_tranco(raw, top_n=1000) == ["dup.example"]
+
+    def test_member_without_newline_is_bounded(self):
+        import tracemalloc
+
+        raw = _zip_streamed(_repeat(b"x", 100 * _MIB))
+        tracemalloc.start()
+        try:
+            with pytest.raises(RuntimeError, match="line too long"):
+                parse_tranco(raw, top_n=10)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert peak < 8 * _MIB
+
+
+class TestParseTrancoLineBudget:
+    @pytest.mark.parametrize(
+        "block",
+        [b"\n", b"\r\n", b"1,a.com\n"],
+        ids=["blank-lf", "blank-crlf", "short-valid-dupes"],
+    )
+    def test_zip_with_too_many_lines_is_rejected_fast(self, block):
+        import time
+
+        raw = _zip_streamed(_repeat(block, 127 * _MIB))
+        t0 = time.monotonic()
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(raw, top_n=1000)
+        # Generous: shared CI runners are slow; the unfixed code needed 18-104 s and never raised.
+        # smoke only (generous, wall-clock); the exact budget is pinned in TestLineBudgetBoundary
+        assert time.monotonic() - t0 < 30
+
+    def test_raw_csv_with_too_many_lines_is_rejected_bounded(self):
+        import time
+        import tracemalloc
+
+        raw = b"\n" * (50 * _MIB)
+        tracemalloc.start()
+        t0 = time.monotonic()
+        try:
+            with pytest.raises(RuntimeError, match="too many lines"):
+                parse_tranco(raw, top_n=1000)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        # smoke only (generous, wall-clock); the exact budget is pinned in TestLineBudgetBoundary
+        assert time.monotonic() - t0 < 30
+        assert peak < 16 * _MIB
+
+    def test_raw_csv_long_line_is_rejected(self):
+        with pytest.raises(RuntimeError, match="line too long"):
+            parse_tranco(b"x" * 200_000, top_n=10)
+
+    def test_empty_zip_is_rejected(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w"):
+            pass
+        with pytest.raises(RuntimeError, match="no members"):
+            parse_tranco(buf.getvalue(), top_n=10)
+
+
+class TestParseTrancoDomainValidation:
+    def test_oversized_binary_and_junk_rows_are_skipped_punycode_kept(self):
+        raw = b"\n".join(
+            [
+                b"1,good.example",
+                b"2," + b"a" * 300 + b".com",
+                b"3,\x00\xff\x80binary",
+                b"4,has space.example",
+                b"5,xn--80ak6aa92e.com",
+                b"6,UPPER.Example",
+                b"7,xn--mnchen-3ya.de",
+            ]
+        )
+        assert parse_tranco(raw, top_n=10) == [
+            "good.example",
+            "xn--80ak6aa92e.com",
+            "upper.example",
+            "xn--mnchen-3ya.de",
+        ]
+
+    def test_bare_domain_format_is_validated_too(self):
+        assert parse_tranco(b"ok.example\nbad/path\n", top_n=10) == ["ok.example"]
+
+    @pytest.mark.parametrize(
+        "junk",
+        ["....", "-", "_", ".", "a..b", "com", "-a.com", "a-.com", "a_b.com", "a" * 64 + ".com", ".com", "a.-"],
+    )
+    def test_malformed_names_are_skipped(self, junk):
+        assert parse_tranco(f"1,{junk}\n2,ok.example\n".encode(), top_n=10) == ["ok.example"]
+
+    @pytest.mark.parametrize(
+        "suffix",
+        [
+            "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "com.br",
+            "net.br", "co.jp", "co.nz", "co.za", "com.cn", "com.mx", "co.in", "com.tr",
+        ],
+    )  # fmt: skip
+    def test_public_suffixes_are_rejected_but_names_below_them_kept(self, suffix):
+        assert parse_tranco(f"1,{suffix}\n2,example.{suffix}\n".encode(), top_n=10) == [f"example.{suffix}"]
+
+    def test_single_trailing_dot_is_normalised(self):
+        assert parse_tranco(b"1,example.com.\n", top_n=10) == ["example.com"]
+
+    def test_total_length_over_253_is_skipped_even_with_valid_labels(self):
+        long_name = ".".join(["a" * 60] * 5) + ".com"  # every label valid, 309 chars total
+        assert parse_tranco(f"1,{long_name}\n2,ok.example\n".encode(), top_n=10) == ["ok.example"]
+
+
+class TestLineBudgetCountsYieldedLines:
+    def test_cr_only_chunks_are_counted_per_line(self):
+        import time
+
+        # Each 64 KiB chunk holds ~65k "lines" once splitlines() runs.
+        raw = _zip_streamed(_repeat((b"\r" * 65534 + b"\n"), 20 * _MIB))
+        t0 = time.monotonic()
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(raw, top_n=1000)
+        # smoke only (generous, wall-clock); the exact budget is pinned in TestLineBudgetBoundary
+        assert time.monotonic() - t0 < 30
+
+
+class TestUpdateDataZeroDomains:
+    def test_zero_valid_domains_keeps_existing_allowlist_and_exits_3(self, tmp_path, monkeypatch):
+        import barb.data_update as du
+
+        dest = tmp_path / ".barb" / "data" / "allowlist.json"
+        dest.parent.mkdir(parents=True)
+        dest.write_text('["keep.example"]')
+        monkeypatch.setattr(du, "user_allowlist_path", lambda: dest)
+        monkeypatch.setattr(du, "fetch_tranco", lambda url, timeout=30.0: b"1,bad domain\n2,/x\n")
+        result = runner.invoke(app, ["update-data", "--source", "https://tranco-list.eu/x.csv"])
+        assert result.exit_code == 3, result.output
+        assert "no valid domains" in result.output
+        assert dest.read_text() == '["keep.example"]'
+        assert "written" not in result.output
+
+    def _run(self, tmp_path, monkeypatch, payload: bytes, args=()):
+        import barb.data_update as du
+
+        dest = tmp_path / ".barb" / "data" / "allowlist.json"
+        dest.parent.mkdir(parents=True)
+        original = json.dumps([f"keep{i}.example" for i in range(5000)]).encode()
+        dest.write_bytes(original)
+        monkeypatch.setattr(du, "user_allowlist_path", lambda: dest)
+        monkeypatch.setattr(du, "fetch_tranco", lambda url, timeout=30.0: payload)
+        result = runner.invoke(app, ["update-data", "--source", "https://tranco-list.eu/x.csv", *args])
+        return result, dest, original
+
+    def test_junk_and_public_suffix_only_archive_keeps_5000_entry_allowlist(self, tmp_path, monkeypatch):
+        result, dest, original = self._run(tmp_path, monkeypatch, b"1,....\n2,-\n3,co.uk\n4,com\n")
+        assert result.exit_code == 3, result.output
+        assert dest.read_bytes() == original
+
+    def test_result_below_ten_percent_of_top_n_is_refused(self, tmp_path, monkeypatch):
+        payload = "".join(f"{i},d{i}.example\n" for i in range(100)).encode()  # 100 < 10% of 5000
+        result, dest, original = self._run(tmp_path, monkeypatch, payload)
+        assert result.exit_code == 3, result.output
+        assert "valid domains" in result.output
+        assert dest.read_bytes() == original
+
+    def test_result_at_ten_percent_is_accepted(self, tmp_path, monkeypatch):
+        payload = "".join(f"{i},d{i}.example\n" for i in range(500)).encode()  # exactly 10%
+        result, dest, original = self._run(tmp_path, monkeypatch, payload)
+        assert result.exit_code == 0, result.output
+        assert dest.read_bytes() != original
+
+
+class TestLineBudgetBoundary:
+    """Deterministic, clock-free pin of the line budget (exactly N accepted, N+1 rejected)."""
+
+    N = 1000
+
+    @staticmethod
+    def _rows(n: int) -> bytes:
+        return b"".join(f"{i},d{i}.example\n".encode() for i in range(n))
+
+    @pytest.fixture(autouse=True)
+    def _budget(self, monkeypatch):
+        import barb.data_update as du
+
+        monkeypatch.setattr(du, "_MAX_LINES", self.N)
+
+    def test_real_budget_value_is_pinned(self, monkeypatch):
+        import barb.data_update as du
+
+        monkeypatch.undo()
+        assert du._MAX_LINES == 2_000_000  # real list ~1M rows: headroom 2x, not unbounded
+
+    @pytest.mark.parametrize("as_zip", [False, True], ids=["raw", "zip"])
+    def test_valid_rows_exactly_n_ok_n_plus_one_rejected(self, as_zip):
+        wrap = (lambda b: _zip_streamed([b])) if as_zip else (lambda b: b)
+        assert len(parse_tranco(wrap(self._rows(self.N)), top_n=10**6)) == self.N
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(wrap(self._rows(self.N + 1)), top_n=10**6)
+
+    @pytest.mark.parametrize("as_zip", [False, True], ids=["raw", "zip"])
+    @pytest.mark.parametrize("eol", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+    def test_blank_lines_count(self, as_zip, eol):
+        wrap = (lambda b: _zip_streamed([b])) if as_zip else (lambda b: b)
+        head = b"1,ok.example" + eol  # one real line, then blanks up to the budget
+        assert parse_tranco(wrap(head + eol * (self.N - 1)), top_n=10) == ["ok.example"]
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(wrap(head + eol * self.N), top_n=10)
+
+    @pytest.mark.parametrize("as_zip", [False, True], ids=["raw", "zip"])
+    def test_cr_chunk_lines_are_counted_per_yielded_line(self, as_zip):
+        wrap = (lambda b: _zip_streamed([b])) if as_zip else (lambda b: b)
+
+        def payload(k: int) -> bytes:
+            data = b"\r" * k + b"\n"
+            assert len(data.decode().splitlines()) == k  # k yielded lines in ONE chunk
+            return data
+
+        assert parse_tranco(wrap(payload(self.N)), top_n=10) == []
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(wrap(payload(self.N + 1)), top_n=10)

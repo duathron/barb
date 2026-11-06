@@ -139,6 +139,187 @@ def test_db_file_permissions_are_0600(tmp_path):
     c.close()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_wal_and_shm_sidecars_are_0600(tmp_path):
+    old = os.umask(0o022)
+    try:
+        cache_dir = tmp_path / "sub"
+        c = OsintCache(db_path=cache_dir / "cache.db")
+        c.set("evil.com", [_sig()])
+        names = sorted(p.name for p in cache_dir.iterdir())
+        assert "cache.db-wal" in names and "cache.db-shm" in names
+        for entry in cache_dir.iterdir():
+            assert stat.S_IMODE(entry.stat().st_mode) == 0o600, entry.name
+        assert stat.S_IMODE(cache_dir.stat().st_mode) == 0o700
+        c.close()
+    finally:
+        os.umask(old)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_stale_world_readable_sidecars_are_tightened(tmp_path):
+    """A 0644 -wal/-shm left behind by an older barb is tightened on open."""
+    old = os.umask(0o022)
+    try:
+        db = tmp_path / "cache.db"
+        for suffix in ("-wal", "-shm"):
+            stale = tmp_path / f"cache.db{suffix}"
+            stale.write_bytes(b"\x00" * 32768)  # invalid/stale content, reused in place
+            stale.chmod(0o644)
+        c = OsintCache(db_path=db)
+        c.set("evil.com", [_sig()])
+        for suffix in ("-wal", "-shm"):
+            mode = stat.S_IMODE((tmp_path / f"cache.db{suffix}").stat().st_mode)
+            assert mode == 0o600, suffix
+        c.close()
+    finally:
+        os.umask(old)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_cache_never_world_readable_at_creation(tmp_path, monkeypatch):
+    """The db file must already be 0600 when sqlite3.connect first sees it."""
+    old = os.umask(0o022)
+    db = tmp_path / "cache.db"
+    seen: list = []
+    real_connect = sqlite3.connect
+
+    def spy(database, *args, **kwargs):
+        try:
+            seen.append(stat.S_IMODE(os.stat(database).st_mode))
+        except FileNotFoundError:
+            seen.append(None)
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", spy)
+    try:
+        c = OsintCache(db_path=db)
+        c.close()
+    finally:
+        os.umask(old)
+    assert seen == [0o600]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_cache_refuses_symlink_db(tmp_path):
+    target = tmp_path / "victim.txt"
+    target.write_bytes(b"")  # empty file: sqlite would happily initialise it
+    target.chmod(0o644)
+    link = tmp_path / "cache.db"
+    link.symlink_to(target)
+    c = OsintCache(db_path=link)
+    c.set("evil.com", [_sig()])
+    assert c.get("evil.com", ttl_seconds=60) is None
+    c.close()
+    assert target.read_bytes() == b""
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+
+
+class _ClosingProxy:
+    """Forward everything to a real connection and record close() calls."""
+
+    def __init__(self, conn, closed):
+        self._conn = conn
+        self._closed = closed
+
+    def close(self):
+        self._closed.append(1)
+        return self._conn.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_symlinked_sidecars_are_never_chmodded_through(tmp_path, monkeypatch):
+    """sqlite replaces a pre-planted sidecar symlink itself, so plant the symlinks
+    deterministically right after the commit, i.e. just before the chmod loop."""
+    db = tmp_path / "cache.db"
+    victims = []
+    for suffix in ("-wal", "-shm"):
+        victim = tmp_path / f"victim{suffix}.txt"
+        victim.write_bytes(b"victim")
+        victim.chmod(0o644)
+        victims.append(victim)
+    real_connect = sqlite3.connect
+
+    class Planting:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def commit(self):
+            self._conn.commit()
+            for suffix, victim in zip(("-wal", "-shm"), victims):
+                side = tmp_path / f"cache.db{suffix}"
+                side.rename(tmp_path / f"moved{suffix}")
+                side.symlink_to(victim)
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", lambda *a, **k: Planting(real_connect(*a, **k)))
+    c = OsintCache(db_path=db)
+    c.close()
+    for victim in victims:
+        assert victim.read_bytes() == b"victim"
+        assert stat.S_IMODE(victim.stat().st_mode) == 0o644, victim.name
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_db_replaced_by_other_regular_file_between_open_and_connect_disables_cache(tmp_path, monkeypatch):
+    real_connect = sqlite3.connect
+    db = tmp_path / "cache.db"
+    seen = []
+    closed: list = []
+
+    def swapping_connect(database, *args, **kwargs):
+        db.rename(tmp_path / "moved.db")
+        db.write_bytes(b"")
+        seen.append(1)
+        return _ClosingProxy(real_connect(database, *args, **kwargs), closed)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", swapping_connect)
+    c = OsintCache(db_path=db)
+    assert closed == [1]  # the connection opened on the swapped path was closed
+    c.set("evil.com", [_sig()])
+    assert seen == [1]
+    assert c.get("evil.com", ttl_seconds=60) is None
+    assert db.read_bytes() == b""
+    c.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_db_swapped_for_symlink_between_open_and_connect_disables_cache(tmp_path, monkeypatch):
+    """Deterministic race: swap cache.db for a symlink to a valid SQLite DB after the
+    O_NOFOLLOW open but before sqlite3.connect; the victim must stay untouched."""
+    victim = tmp_path / "victim.db"
+    vc = sqlite3.connect(str(victim))
+    vc.execute("CREATE TABLE precious (x)")
+    vc.commit()
+    vc.close()
+    real_connect = sqlite3.connect
+    db = tmp_path / "cache.db"
+    closed: list = []
+
+    def swapping_connect(database, *args, **kwargs):
+        db.rename(tmp_path / "moved.db")
+        db.symlink_to(victim)
+        return _ClosingProxy(real_connect(database, *args, **kwargs), closed)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", swapping_connect)
+    c = OsintCache(db_path=db)
+    assert closed == [1]  # the connection opened on the swapped path was closed
+    c.set("evil.com", [_sig()])
+    assert c.get("evil.com", ttl_seconds=60) is None
+    c.close()
+    chk = real_connect(str(victim))
+    tables = {r[0] for r in chk.execute("SELECT name FROM sqlite_master")}
+    mode = chk.execute("PRAGMA journal_mode").fetchone()[0]
+    chk.close()
+    assert tables == {"precious"}
+    assert mode != "wal"
+
+
 # ---------------------------------------------------------------------------
 # Integration: _run_enrichers uses the cache
 # ---------------------------------------------------------------------------
