@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,7 @@ app = typer.Typer(
     name="barb",
     help="Heuristic phishing URL analyzer for SOC/DFIR workflows.",
     no_args_is_help=True,
+    pretty_exceptions_show_locals=False,  # tracebacks must never dump locals (API key)
 )
 
 
@@ -502,6 +504,7 @@ def config(
         data = cfg.model_dump()
         if data["explain"]["api_key"]:
             data["explain"]["api_key"] = "***"
+        data["explain"]["ollama_host"] = re.sub(r"(?<=//)[^/@\s]*@", "***@", data["explain"]["ollama_host"])
         typer.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
     else:
         typer.echo("Use --show to display current configuration.")

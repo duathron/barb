@@ -200,3 +200,50 @@ def test_invalid_config_error_does_not_echo_values(tmp_path, monkeypatch):
         assert res.exit_code != 0, args
         assert "explain.api_key" in res.output, args
         assert "Traceback" not in res.output, args
+
+
+_SHAPED_KEY = "sk-SECRETKEY123456"
+
+
+def test_pretty_exceptions_do_not_show_locals():
+    """Defence in depth: a traceback must never dump locals (API key)."""
+    from barb.main import app
+
+    assert app.pretty_exceptions_show_locals is False
+
+
+def test_malformed_or_non_mapping_config_is_one_line_error(tmp_path, monkeypatch):
+    """List-shaped or unparsable YAML must exit 3 without a traceback or the key."""
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    bodies = (
+        f"- explain:\n    api_key: {_SHAPED_KEY}\n",
+        f"explain:\n  api_key: {_SHAPED_KEY}: x\n",
+    )
+    appdir = _cli_env(tmp_path, monkeypatch)
+    for body in bodies:
+        (appdir / "config.yaml").write_text(body)
+        for args in (["config", "--show"], ["analyze", _PHISH, "-o", "json", "-q"]):
+            res = CliRunner().invoke(app, args, color=True)
+            shown = res.output + repr(res.exception)
+            assert res.exit_code == 3, (body, args, shown)
+            assert "Traceback" not in shown, (body, args)
+            assert _SHAPED_KEY not in shown, (body, args)
+            assert "Error:" in shown, (body, args)
+
+
+def test_config_show_redacts_ollama_userinfo(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    appdir = _cli_env(tmp_path, monkeypatch)
+    (appdir / "config.yaml").write_text("explain:\n  ollama_host: http://user:pass@host:11434\n")
+
+    res = CliRunner().invoke(app, ["config", "--show"])
+
+    assert res.exit_code == 0
+    assert "user:pass" not in res.output
+    assert "http://***@host:11434" in res.output

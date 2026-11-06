@@ -114,6 +114,8 @@ class ConfigError(ValueError):
 
 
 def _validate(data: dict) -> AppConfig:
+    if not isinstance(data, dict):
+        raise ConfigError("config.yaml must be a YAML mapping")
     try:
         return AppConfig(**data)
     except ValidationError as exc:
@@ -126,7 +128,11 @@ def _validate(data: dict) -> AppConfig:
 
 def _load_yaml(path: Path) -> dict:
     with open(path) as f:
-        return yaml.safe_load(f) or {}
+        try:
+            return yaml.safe_load(f) or {}
+        except yaml.YAMLError:
+            # PyYAML marks/locals carry file content; keep them out of the traceback.
+            raise ConfigError("config.yaml is not valid YAML") from None
 
 
 def load_config(config_path: Optional[Path] = None) -> AppConfig:
