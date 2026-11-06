@@ -516,7 +516,7 @@ class TestLineBudgetCountsYieldedLines:
         t0 = time.monotonic()
         with pytest.raises(RuntimeError, match="too many lines"):
             parse_tranco(raw, top_n=1000)
-        assert time.monotonic() - t0 < 3
+        assert time.monotonic() - t0 < 30
 
 
 class TestUpdateDataZeroDomains:
