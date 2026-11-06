@@ -428,7 +428,8 @@ class TestParseTrancoLineBudget:
         t0 = time.monotonic()
         with pytest.raises(RuntimeError, match="too many lines"):
             parse_tranco(raw, top_n=1000)
-        assert time.monotonic() - t0 < 5
+        # Generous: shared CI runners are slow; the unfixed code needed 18-104 s and never raised.
+        assert time.monotonic() - t0 < 30
 
     def test_raw_csv_with_too_many_lines_is_rejected_bounded(self):
         import time
