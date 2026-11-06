@@ -504,7 +504,9 @@ def config(
         data = cfg.model_dump()
         if data["explain"]["api_key"]:
             data["explain"]["api_key"] = "***"
-        data["explain"]["ollama_host"] = re.sub(r"(?<=//)[^/@\s]*@", "***@", data["explain"]["ollama_host"])
+        data["explain"]["ollama_host"] = re.sub(
+            r"^((?:[A-Za-z][\w+.-]*://)?)[^/?#]*@", r"\1***@", data["explain"]["ollama_host"]
+        )
         typer.echo(yaml.dump(data, default_flow_style=False, sort_keys=False))
     else:
         typer.echo("Use --show to display current configuration.")

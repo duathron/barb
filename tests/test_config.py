@@ -247,3 +247,44 @@ def test_config_show_redacts_ollama_userinfo(tmp_path, monkeypatch):
     assert res.exit_code == 0
     assert "user:pass" not in res.output
     assert "http://***@host:11434" in res.output
+
+
+def test_config_show_redacts_whole_ollama_userinfo(tmp_path, monkeypatch):
+    import yaml
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    appdir = _cli_env(tmp_path, monkeypatch)
+    cases = {
+        "http://user:p@ss@host:11434": "http://***@host:11434",
+        "user:pw@host:11434": "***@host:11434",
+        "http://user:pw@host:11434": "http://***@host:11434",
+        "http://us%40er:pw@h": "http://***@h",
+        "http://host:11434": "http://host:11434",
+        "http://[::1]:11434": "http://[::1]:11434",
+        "https://u@h/path@x": "https://***@h/path@x",
+        "http://u:pa@SECRET@h": "http://***@h",
+        "http://u:SE CRET@h": "http://***@h",
+        "SECRET:x@h:11434": "***@h:11434",
+        "http:u:SECRET@h": "***@h",
+    }
+    for raw, want in cases.items():
+        (appdir / "config.yaml").write_text(f"explain:\n  ollama_host: '{raw}'\n")
+        res = CliRunner().invoke(app, ["config", "--show"])
+        assert res.exit_code == 0, raw
+        assert yaml.safe_load(res.output)["explain"]["ollama_host"] == want, raw
+
+
+def test_binary_config_is_value_free_error(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    appdir = _cli_env(tmp_path, monkeypatch)
+    (appdir / "config.yaml").write_bytes(b"explain:\n  api_key: sk-BINSECRET\xff\xfe\n")
+
+    res = CliRunner().invoke(app, ["config", "--show"], color=True)
+
+    assert res.exit_code == 3
+    assert "BINSECRET" not in res.output + repr(res.exception)

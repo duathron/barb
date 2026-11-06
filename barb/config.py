@@ -130,7 +130,7 @@ def _load_yaml(path: Path) -> dict:
     with open(path) as f:
         try:
             return yaml.safe_load(f) or {}
-        except yaml.YAMLError:
+        except (yaml.YAMLError, UnicodeDecodeError):
             # PyYAML marks/locals carry file content; keep them out of the traceback.
             raise ConfigError("config.yaml is not valid YAML") from None
 
