@@ -429,6 +429,7 @@ class TestParseTrancoLineBudget:
         with pytest.raises(RuntimeError, match="too many lines"):
             parse_tranco(raw, top_n=1000)
         # Generous: shared CI runners are slow; the unfixed code needed 18-104 s and never raised.
+        # smoke only (generous, wall-clock); the exact budget is pinned in TestLineBudgetBoundary
         assert time.monotonic() - t0 < 30
 
     def test_raw_csv_with_too_many_lines_is_rejected_bounded(self):
@@ -444,6 +445,7 @@ class TestParseTrancoLineBudget:
             _, peak = tracemalloc.get_traced_memory()
         finally:
             tracemalloc.stop()
+        # smoke only (generous, wall-clock); the exact budget is pinned in TestLineBudgetBoundary
         assert time.monotonic() - t0 < 30
         assert peak < 16 * _MIB
 
@@ -516,6 +518,7 @@ class TestLineBudgetCountsYieldedLines:
         t0 = time.monotonic()
         with pytest.raises(RuntimeError, match="too many lines"):
             parse_tranco(raw, top_n=1000)
+        # smoke only (generous, wall-clock); the exact budget is pinned in TestLineBudgetBoundary
         assert time.monotonic() - t0 < 30
 
 
@@ -563,3 +566,54 @@ class TestUpdateDataZeroDomains:
         result, dest, original = self._run(tmp_path, monkeypatch, payload)
         assert result.exit_code == 0, result.output
         assert dest.read_bytes() != original
+
+
+class TestLineBudgetBoundary:
+    """Deterministic, clock-free pin of the line budget (exactly N accepted, N+1 rejected)."""
+
+    N = 1000
+
+    @staticmethod
+    def _rows(n: int) -> bytes:
+        return b"".join(f"{i},d{i}.example\n".encode() for i in range(n))
+
+    @pytest.fixture(autouse=True)
+    def _budget(self, monkeypatch):
+        import barb.data_update as du
+
+        monkeypatch.setattr(du, "_MAX_LINES", self.N)
+
+    def test_real_budget_value_is_pinned(self, monkeypatch):
+        import barb.data_update as du
+
+        monkeypatch.undo()
+        assert du._MAX_LINES == 2_000_000  # real list ~1M rows: headroom 2x, not unbounded
+
+    @pytest.mark.parametrize("as_zip", [False, True], ids=["raw", "zip"])
+    def test_valid_rows_exactly_n_ok_n_plus_one_rejected(self, as_zip):
+        wrap = (lambda b: _zip_streamed([b])) if as_zip else (lambda b: b)
+        assert len(parse_tranco(wrap(self._rows(self.N)), top_n=10**6)) == self.N
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(wrap(self._rows(self.N + 1)), top_n=10**6)
+
+    @pytest.mark.parametrize("as_zip", [False, True], ids=["raw", "zip"])
+    @pytest.mark.parametrize("eol", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+    def test_blank_lines_count(self, as_zip, eol):
+        wrap = (lambda b: _zip_streamed([b])) if as_zip else (lambda b: b)
+        head = b"1,ok.example" + eol  # one real line, then blanks up to the budget
+        assert parse_tranco(wrap(head + eol * (self.N - 1)), top_n=10) == ["ok.example"]
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(wrap(head + eol * self.N), top_n=10)
+
+    @pytest.mark.parametrize("as_zip", [False, True], ids=["raw", "zip"])
+    def test_cr_chunk_lines_are_counted_per_yielded_line(self, as_zip):
+        wrap = (lambda b: _zip_streamed([b])) if as_zip else (lambda b: b)
+
+        def payload(k: int) -> bytes:
+            data = b"\r" * k + b"\n"
+            assert len(data.decode().splitlines()) == k  # k yielded lines in ONE chunk
+            return data
+
+        assert parse_tranco(wrap(payload(self.N)), top_n=10) == []
+        with pytest.raises(RuntimeError, match="too many lines"):
+            parse_tranco(wrap(payload(self.N + 1)), top_n=10)
