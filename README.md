@@ -310,7 +310,7 @@ allowlist_check:
   max_age_days: 90         # warn when the effective allowlist is older than this
 ```
 
-**Environment variable:** Set `BARB_LLM_KEY` for cloud LLM API key (Anthropic / OpenAI).
+**Environment variable:** Set `BARB_LLM_KEY` for cloud LLM API key (Anthropic / OpenAI). The anthropic/openai SDKs honour `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL`, so the process environment is trusted.
 
 ### Ollama (local LLM — no API key, no data leaves host)
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from shipwright_kit.config import app_dir
 from shipwright_kit.config import load_config as _resolve_config
 
@@ -109,6 +109,21 @@ def _ensure_app_dir() -> Path:
     return app_dir("barb", create=True)
 
 
+class ConfigError(ValueError):
+    """Invalid configuration; the message never contains configured values."""
+
+
+def _validate(data: dict) -> AppConfig:
+    try:
+        return AppConfig(**data)
+    except ValidationError as exc:
+        # include_input=False: a mistyped api_key must not be echoed back.
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors(include_input=False)
+        )
+        raise ConfigError(f"Invalid configuration: {problems}") from None
+
+
 def _load_yaml(path: Path) -> dict:
     with open(path) as f:
         return yaml.safe_load(f) or {}
@@ -123,7 +138,7 @@ def load_config(config_path: Optional[Path] = None) -> AppConfig:
     config = _resolve_config(
         [config_path, _APP_DIR / "config.yaml"],
         loader=_load_yaml,
-        validator=lambda data: AppConfig(**data),
+        validator=_validate,
     )
 
     # Env var overrides

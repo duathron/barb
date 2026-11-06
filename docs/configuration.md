@@ -26,7 +26,10 @@ needed). Source of truth: `barb/config.py::load_config`.
 | `BARB_LLM_KEY` | LLM API key for `anthropic` or `openai` explain providers | `explain.api_key` |
 
 `BARB_LLM_KEY` takes precedence over `explain.api_key` in the config file. No
-other environment variables are read by barb's configuration system.
+other environment variables are read by barb's configuration system. The
+`anthropic` and `openai` SDKs themselves honour `ANTHROPIC_BASE_URL` and
+`OPENAI_BASE_URL`, so the process environment is trusted: anyone who controls it
+can redirect where the API key is sent.
 
 ---
 

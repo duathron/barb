@@ -11,7 +11,8 @@ import typer
 
 from barb import __version__
 from barb.banner import show_banner
-from barb.config import AppConfig, load_config
+from barb.config import AppConfig, ConfigError
+from barb.config import load_config as _load_config
 from barb.defang import defang_url, refang_url
 from barb.help import _MANUAL_TOPICS
 from barb.models import AnalysisResult
@@ -478,6 +479,15 @@ def _output_results(
             if not summary_only:
                 for result in results:
                     format_rich(result, defang=defang)
+
+
+def load_config() -> AppConfig:
+    """Load config; an invalid file becomes a one-line error and exit 3."""
+    try:
+        return _load_config()
+    except ConfigError as exc:
+        typer.echo(f"Error: {_plain_safe(exc)}", err=True)
+        raise typer.Exit(3) from None
 
 
 @app.command()

@@ -179,3 +179,24 @@ def test_config_show_unset_key_stays_null(tmp_path, monkeypatch):
 
     assert res.exit_code == 0
     assert "api_key: null" in res.output
+
+
+_NUMERIC_KEY = "9876543210123456"
+
+
+def test_invalid_config_error_does_not_echo_values(tmp_path, monkeypatch):
+    """A non-string api_key must not leak into config validation errors."""
+    from typer.testing import CliRunner
+
+    from barb.main import app
+
+    appdir = _cli_env(tmp_path, monkeypatch)
+    (appdir / "config.yaml").write_text(f"explain:\n  api_key: {_NUMERIC_KEY}\n")
+
+    for args in (["config", "--show"], ["analyze", _PHISH, "-o", "json", "-q"]):
+        res = CliRunner().invoke(app, args, color=True)
+        shown = res.output + repr(res.exception)
+        assert _NUMERIC_KEY not in shown, args
+        assert res.exit_code != 0, args
+        assert "explain.api_key" in res.output, args
+        assert "Traceback" not in res.output, args
