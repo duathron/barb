@@ -24,6 +24,9 @@ from urllib.request import urlopen
 
 _DEFAULT_TRANCO_URL = "https://tranco-list.eu/top-1m.csv.zip"
 _MAX_BYTES = 50 * 1024 * 1024  # 50 MB hard cap
+_MAX_ZIP_MEMBERS = 16
+_MAX_ZIP_UNCOMPRESSED = 128 * 1024 * 1024  # real list is ~23 MB; >= 4x headroom
+_MAX_LINE_BYTES = 65536
 
 
 def user_allowlist_path() -> Path:
@@ -90,18 +93,40 @@ def parse_tranco(raw: bytes, top_n: int) -> list[str]:
     # Detect ZIP by magic bytes
     if raw[:2] == b"PK":
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            infos = zf.infolist()
+            if len(infos) > _MAX_ZIP_MEMBERS:
+                raise RuntimeError(f"Archive rejected: more than {_MAX_ZIP_MEMBERS} members.")
+            if sum(i.file_size for i in infos) > _MAX_ZIP_UNCOMPRESSED:
+                raise RuntimeError(
+                    f"Archive rejected: uncompressed size exceeds {_MAX_ZIP_UNCOMPRESSED // (1024 * 1024)} MB."
+                )
             # Pick the first .csv file; fall back to first member
-            csv_names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
-            member = csv_names[0] if csv_names else zf.namelist()[0]
-            csv_bytes = zf.read(member)
-    else:
-        csv_bytes = raw
+            names = [i.filename for i in infos]
+            csv_names = [n for n in names if n.lower().endswith(".csv")]
+            member = csv_names[0] if csv_names else names[0]
+            # Stream the member: a header can lie about its size, a deflate stream
+            # can expand ~1000x, so never materialise the whole member in memory.
+            with zf.open(member) as fh:
+                return _collect_domains(_iter_zip_lines(fh), top_n)
+    return _collect_domains(raw.decode("utf-8", errors="replace").splitlines(), top_n)
 
-    text = csv_bytes.decode("utf-8", errors="replace")
+
+def _iter_zip_lines(fh):
+    """Yield decoded lines from a binary stream with bounded per-line memory."""
+    while True:
+        chunk = fh.readline(_MAX_LINE_BYTES)
+        if not chunk:
+            return
+        if len(chunk) >= _MAX_LINE_BYTES and not chunk.endswith(b"\n"):
+            raise RuntimeError("Archive rejected: line too long.")
+        yield from chunk.decode("utf-8", errors="replace").splitlines()
+
+
+def _collect_domains(lines, top_n: int) -> list[str]:
     seen: set[str] = set()
     domains: list[str] = []
 
-    for line in text.splitlines():
+    for line in lines:
         line = line.strip()
         if not line:
             continue

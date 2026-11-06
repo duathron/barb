@@ -139,6 +139,82 @@ def test_db_file_permissions_are_0600(tmp_path):
     c.close()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_wal_and_shm_sidecars_are_0600(tmp_path):
+    old = os.umask(0o022)
+    try:
+        cache_dir = tmp_path / "sub"
+        c = OsintCache(db_path=cache_dir / "cache.db")
+        c.set("evil.com", [_sig()])
+        names = sorted(p.name for p in cache_dir.iterdir())
+        assert "cache.db-wal" in names and "cache.db-shm" in names
+        for entry in cache_dir.iterdir():
+            assert stat.S_IMODE(entry.stat().st_mode) == 0o600, entry.name
+        assert stat.S_IMODE(cache_dir.stat().st_mode) == 0o700
+        c.close()
+    finally:
+        os.umask(old)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_stale_world_readable_sidecars_are_tightened(tmp_path):
+    """A 0644 -wal/-shm left behind by an older barb is tightened on open."""
+    old = os.umask(0o022)
+    try:
+        db = tmp_path / "cache.db"
+        for suffix in ("-wal", "-shm"):
+            stale = tmp_path / f"cache.db{suffix}"
+            stale.write_bytes(b"\x00" * 32768)  # invalid/stale content, reused in place
+            stale.chmod(0o644)
+        c = OsintCache(db_path=db)
+        c.set("evil.com", [_sig()])
+        for suffix in ("-wal", "-shm"):
+            mode = stat.S_IMODE((tmp_path / f"cache.db{suffix}").stat().st_mode)
+            assert mode == 0o600, suffix
+        c.close()
+    finally:
+        os.umask(old)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_cache_never_world_readable_at_creation(tmp_path, monkeypatch):
+    """The db file must already be 0600 when sqlite3.connect first sees it."""
+    old = os.umask(0o022)
+    db = tmp_path / "cache.db"
+    seen: list = []
+    real_connect = sqlite3.connect
+
+    def spy(database, *args, **kwargs):
+        try:
+            seen.append(stat.S_IMODE(os.stat(database).st_mode))
+        except FileNotFoundError:
+            seen.append(None)
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr("barb.cache.sqlite3.connect", spy)
+    try:
+        c = OsintCache(db_path=db)
+        c.close()
+    finally:
+        os.umask(old)
+    assert seen == [0o600]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+def test_cache_refuses_symlink_db(tmp_path):
+    target = tmp_path / "victim.txt"
+    target.write_bytes(b"")  # empty file: sqlite would happily initialise it
+    target.chmod(0o644)
+    link = tmp_path / "cache.db"
+    link.symlink_to(target)
+    c = OsintCache(db_path=link)
+    c.set("evil.com", [_sig()])
+    assert c.get("evil.com", ttl_seconds=60) is None
+    c.close()
+    assert target.read_bytes() == b""
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+
+
 # ---------------------------------------------------------------------------
 # Integration: _run_enrichers uses the cache
 # ---------------------------------------------------------------------------

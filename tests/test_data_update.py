@@ -316,3 +316,99 @@ class TestUpdateDataCommand:
         plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
         assert "--top-n" in plain
         assert "--source" in plain
+
+
+# ---------------------------------------------------------------------------
+# parse_tranco — bounded zip parsing
+# ---------------------------------------------------------------------------
+
+_MIB = 1024 * 1024
+
+
+def _zip_streamed(chunks, name: str = "top.csv") -> bytes:
+    """Build a deflate ZIP whose single member is the concatenation of *chunks*."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        with zf.open(name, "w") as fh:
+            for chunk in chunks:
+                fh.write(chunk)
+    return buf.getvalue()
+
+
+def _repeat(block: bytes, total: int):
+    """Yield *block* repeatedly until about *total* bytes were produced."""
+    chunk = block * (_MIB // len(block))
+    for _ in range(total // len(chunk)):
+        yield chunk
+
+
+class TestParseTrancoZipBounds:
+    def test_rejects_zip_exceeding_uncompressed_cap(self, monkeypatch):
+        import barb.data_update as du
+
+        monkeypatch.setattr(du, "_MAX_ZIP_UNCOMPRESSED", 1_000_000)
+        raw = _zip_streamed(_repeat(b"1,a.example\n", 5 * _MIB))
+        assert len(raw) < 100_000  # a tiny archive that inflates to ~5 MB
+        with pytest.raises(RuntimeError, match="uncompressed"):
+            parse_tranco(raw, top_n=10)
+
+    def test_rejects_too_many_members(self):
+        import barb.data_update as du
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for i in range(du._MAX_ZIP_MEMBERS + 1):
+                zf.writestr(f"m{i}.csv", "1,a.example\n")
+        with pytest.raises(RuntimeError, match="members"):
+            parse_tranco(buf.getvalue(), top_n=10)
+
+    def test_header_that_lies_about_size_is_not_trusted(self):
+        # Declare 100 bytes in the central directory while the member inflates to 5 MB.
+        raw = bytearray(_zip_streamed(_repeat(b"1,a.example\n", 5 * _MIB)))
+        cd = raw.rindex(b"PK\x01\x02")
+        raw[cd + 24 : cd + 28] = (100).to_bytes(4, "little")
+        with pytest.raises(zipfile.BadZipFile):
+            parse_tranco(bytes(raw), top_n=10**9)
+
+    def test_realistic_top1m_shape_is_accepted(self):
+        rows = (f"{i},domain{i}.example.com\n".encode() for i in range(1, 1_000_001))
+        raw = _zip_streamed([b"".join(rows)])
+        result = parse_tranco(raw, top_n=1_000_000)
+        assert len(result) == 1_000_000
+        assert result[0] == "domain1.example.com"
+
+    def test_memory_bounded_when_top_n_reached_early(self):
+        import tracemalloc
+
+        head = "".join(f"{i},d{i}.example\n" for i in range(2000)).encode()
+
+        def chunks():
+            yield head
+            yield from _repeat(b"1,filler.example\n", 100 * _MIB)
+
+        raw = _zip_streamed(chunks())
+        tracemalloc.start()
+        try:
+            result = parse_tranco(raw, top_n=1000)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert len(result) == 1000
+        assert peak < 32 * _MIB
+
+    def test_top_n_never_reached_still_completes(self):
+        raw = _zip_streamed(_repeat(b"1,dup.example\n", 120 * _MIB))
+        assert parse_tranco(raw, top_n=1000) == ["dup.example"]
+
+    def test_member_without_newline_is_bounded(self):
+        import tracemalloc
+
+        raw = _zip_streamed(_repeat(b"x", 100 * _MIB))
+        tracemalloc.start()
+        try:
+            with pytest.raises(RuntimeError, match="line too long"):
+                parse_tranco(raw, top_n=10)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert peak < 8 * _MIB

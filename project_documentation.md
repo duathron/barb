@@ -121,7 +121,7 @@ tools rather than copied.
 ### Dependencies
 
 Core runtime (always installed): `typer`, `rich`, `pydantic`, `pyyaml`,
-`python-dotenv`, and — since v1.6.0 — **`shipwright-kit>=0.6.0,<0.7.0`** (the
+and — since v1.6.0 — **`shipwright-kit>=0.6.0,<0.7.0`** (the
 shared Shipwright library, resolved from PyPI; imported at runtime by
 `barb/config.py` and by the eval harness). Cloud LLM providers are an optional
 extra: `pip install barb-phish[llm]` adds `anthropic` and `openai`. Dev tooling
@@ -139,7 +139,7 @@ group, installed with `uv sync --dev`.
 4. **No eval/exec** — no dynamic code execution
 5. **Secure storage:** Config dir `~/.barb/` with 0o700, config and
    user-override data files written 0o600 (atomic `os.replace`)
-6. **Lean dependencies:** Typer, Rich, Pydantic, PyYAML, python-dotenv,
+6. **Lean dependencies:** Typer, Rich, Pydantic, PyYAML,
    shipwright-kit (core); cloud LLM providers are an optional `[llm]` extra
 7. **Bundled static data** — no automatic runtime network fetches for data
    files; the `update-data` refresh is opt-in and HTTPS-only
@@ -461,7 +461,7 @@ the marginal recall of `--osint` (RDAP age + crt.sh recency) on a live corpus.
 
 ### Decision 7: LLM dependencies as optional extras
 **Vote:** Unanimous (7/7)
-**Rationale:** Core install has 5 dependencies only (typer, rich, pydantic, pyyaml, python-dotenv). LLM packages (anthropic, openai) add significant dependency weight and are only needed for `--explain` with cloud providers. `pip install barb-phish[llm]` keeps the default install minimal.
+**Rationale:** Core install has 5 dependencies only (typer, rich, pydantic, pyyaml, shipwright-kit). LLM packages (anthropic, openai) add significant dependency weight and are only needed for `--explain` with cloud providers. `pip install barb-phish[llm]` keeps the default install minimal.
 
 ### Decision 8: CI from v1.0
 **Vote:** Unanimous (7/7)
