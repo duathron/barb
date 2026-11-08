@@ -7,13 +7,16 @@ usage lines read `[URLS]...` / `[TOPIC]`; these tests pin that on any typer.
 
 from __future__ import annotations
 
+import enum
 import re
+from typing import Annotated
 
 import pytest
+import typer
 import typer.main
 from typer.testing import CliRunner
 
-from barb.main import app
+from barb.main import _plain_usage_piece, _PlainUsageCommand, app
 
 runner = CliRunner()
 
@@ -86,3 +89,57 @@ def test_root_help_works() -> None:
 def test_usage_line_joins_wrapped_continuation() -> None:
     wrapped = " Usage: barb analyze [OPTIONS]\n [urls]...\n\n Analyze URLs\n"
     assert _usage_line(wrapped) == "Usage: barb analyze [OPTIONS] [urls]..."
+
+
+class _Fmt(str, enum.Enum):
+    json = "json"
+    text = "text"
+
+
+def _throwaway_usage() -> str:
+    """Usage line of a throwaway command that uses the barb command class."""
+    sandbox = typer.Typer()
+
+    @sandbox.command(cls=_PlainUsageCommand)
+    def probe(
+        name: Annotated[str, typer.Argument()],
+        mode: Annotated[_Fmt, typer.Argument()] = _Fmt.json,
+    ) -> None:
+        pass
+
+    @sandbox.command()
+    def other() -> None:  # a second command keeps `probe` a named subcommand
+        pass
+
+    result = runner.invoke(sandbox, ["probe", "--help"], env=_WIDE)
+    assert result.exit_code == 0, result.output
+    return _usage_line(result.output)
+
+
+def test_required_argument_is_bare_uppercase_name() -> None:
+    usage = _throwaway_usage()
+    assert "{" not in usage and "}" not in usage, usage
+    assert " NAME " in f"{usage} ", usage
+
+
+def test_choice_values_keep_their_case() -> None:
+    usage = _throwaway_usage()
+    assert "json|text" in usage, usage
+    assert "JSON" not in usage and "TEXT" not in usage, usage
+    assert "MODE" in usage, usage
+
+
+@pytest.mark.parametrize(
+    ("piece", "expected"),
+    [
+        ("[OPTIONS]", "[OPTIONS]"),
+        ("{name}", "NAME"),
+        ("[urls]...", "[URLS]..."),
+        ("[topic]", "[TOPIC]"),
+        ("{req}:<json|text>", "REQ:<json|text>"),
+        ("[mode]:<json|text>", "[MODE]:<json|text>"),
+        ("URLS...", "URLS..."),
+    ],
+)
+def test_plain_usage_piece_changes_only_the_name(piece: str, expected: str) -> None:
+    assert _plain_usage_piece(piece) == expected

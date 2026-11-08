@@ -33,16 +33,28 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit(0)
 
 
+_USAGE_NAME = re.compile(r"^(\[?)\{?([^\]}:.<\[{]+)\}?")
+
+
+def _plain_usage_piece(piece: str) -> str:
+    """Uppercase the argument NAME and drop typer 0.27's braces around it.
+
+    Only the leading name token changes; anything after it (`...`, a
+    `:<json|text>` choice list) is left exactly as typer printed it.
+    """
+    return _USAGE_NAME.sub(lambda m: m.group(1) + m.group(2).upper(), piece, count=1)
+
+
 class _PlainUsageCommand(typer.core.TyperCommand):
     """Keep uppercase argument names (`[URLS]...`, `[TOPIC]`) in the usage line.
 
     typer 0.27 prints optional arguments lowercase and brace-wraps required
-    ones; typer 0.26 printed them uppercase and bare. Normalise so both read alike.
+    ones; typer 0.26 printed them uppercase and bare. Normalise the name so
+    both read alike. Choice values (`<json|text>`) keep their case.
     """
 
     def collect_usage_pieces(self, ctx):  # type: ignore[no-untyped-def]
-        pieces = super().collect_usage_pieces(ctx)
-        return [p.replace("{", "").replace("}", "").upper() for p in pieces]
+        return [_plain_usage_piece(p) for p in super().collect_usage_pieces(ctx)]
 
 
 app = typer.Typer(
