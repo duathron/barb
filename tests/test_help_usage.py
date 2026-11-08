@@ -139,6 +139,12 @@ def test_choice_values_keep_their_case() -> None:
         ("{req}:<json|text>", "REQ:<json|text>"),
         ("[mode]:<json|text>", "[MODE]:<json|text>"),
         ("URLS...", "URLS..."),
+        ("<a|b>", "<a|b>"),
+        ("B:{json|text}", "B:{json|text}"),
+        ("[D_E]:[json|text]", "[D_E]:[json|text]"),
+        ("{a}:<json|text>", "A:<json|text>"),
+        ("[a.b]", "[A.b]"),
+        ("[a:b]", "[A:b]"),
     ],
 )
 def test_plain_usage_piece_changes_only_the_name(piece: str, expected: str) -> None:
