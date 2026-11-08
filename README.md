@@ -376,6 +376,15 @@ pytest tests/ -v
 - Config directory secured with 0o700 permissions
 - LLM and OSINT dependencies are optional extras — core install has zero network deps
 
+### `--explain` LLM hardening (OWASP LLM01 / LLM05)
+
+These two protections apply only to the optional LLM explain path (Anthropic / OpenAI / Ollama). The deterministic URL verdict above is computed separately and stays the same either way.
+
+> [!WARNING]
+> The phishing URL and each analyzer signal detail are attacker-influenceable — whoever controls the URL partly controls what lands in the LLM prompt. Before either is submitted, barb scans them for prompt-injection patterns (`barb/explain/injection.py`, a subclass of the shared `shipwright_kit.security.injection` detector also used by vex and sift) and redacts anything that scores CRITICAL. The system prompt also tells the model to treat the URL and signal data strictly as data, never as instructions. This is defense-in-depth, not a guarantee.
+
+- The model's reply is escaped where it's printed: `barb/output/formatter.py` runs it through `shipwright_kit.security.safe_render` in both `format_rich` (Rich markup escaped, so `[red]` can't restyle the terminal) and `format_console` (ANSI/control sequences stripped for the plain-text path) — so a manipulated explanation can't inject markup or escape codes.
+
 ### Privacy footprint of `--osint`
 
 The offline core makes **zero** outbound connections. When you opt into `--osint`, barb makes three kinds of request — **never to the analyzed host itself**:
