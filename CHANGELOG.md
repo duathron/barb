@@ -5,6 +5,13 @@ All notable changes to **barb** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.2](https://github.com/duathron/barb/compare/v1.8.1...v1.8.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* keep uppercase argument names in usage lines on typer 0.27 ([#49](https://github.com/duathron/barb/issues/49)) ([818f1ee](https://github.com/duathron/barb/commit/818f1ee63c1af0794a1b5bac18f699e69aa15a44))
+
 ## [1.8.1](https://github.com/duathron/barb/compare/v1.8.0...v1.8.1) (2026-11-06)
 
 
