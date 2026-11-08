@@ -33,6 +33,18 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit(0)
 
 
+class _PlainUsageCommand(typer.core.TyperCommand):
+    """Keep uppercase argument names (`[URLS]...`, `[TOPIC]`) in the usage line.
+
+    typer 0.27 prints optional arguments lowercase and brace-wraps required
+    ones; typer 0.26 printed them uppercase and bare. Normalise so both read alike.
+    """
+
+    def collect_usage_pieces(self, ctx):  # type: ignore[no-untyped-def]
+        pieces = super().collect_usage_pieces(ctx)
+        return [p.replace("{", "").replace("}", "").upper() for p in pieces]
+
+
 app = typer.Typer(
     name="barb",
     help="Heuristic phishing URL analyzer for SOC/DFIR workflows.",
@@ -284,7 +296,7 @@ def _explain(result: AnalysisResult, config: AppConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
-@app.command()
+@app.command(cls=_PlainUsageCommand)
 def analyze(
     urls: Annotated[Optional[list[str]], typer.Argument(help="One or more URLs to analyze")] = None,
     file: Annotated[Optional[Path], typer.Option("--file", "-f", help="File containing URLs (one per line)")] = None,
@@ -614,7 +626,11 @@ def update_data(
     typer.echo("barb analyze will now use the expanded allowlist for false-positive suppression.")
 
 
-@app.command(name="manual", help="[bold blue]Show usage guide[/bold blue] — run without topic for overview.")
+@app.command(
+    name="manual",
+    cls=_PlainUsageCommand,
+    help="[bold blue]Show usage guide[/bold blue] — run without topic for overview.",
+)
 def manual(
     topic: Annotated[
         Optional[str],
